@@ -6,6 +6,8 @@ import { AppWrapper } from '../AppWrapper';
 import { CoinGrid } from '../components/wallet/CoinGrid';
 import { CoinDetail } from '../components/wallet/CoinDetail';
 import { UnifiedHistory } from '../components/wallet/UnifiedHistory';
+import { MyContactCardPage } from '../components/ContactCard/MyContactCardPage';
+import { FindPersonPage } from '../components/ContactCard/FindPersonPage';
 import { useSupportedChains } from '../hooks/useSupportedChains';
 
 function CoinDetailRouter() {
@@ -24,6 +26,8 @@ const router = createHashRouter([
       { index: true, element: <CoinGrid /> },
       { path: ':coinRoute', element: <CoinDetailRouter /> },
       { path: 'history', element: <UnifiedHistory /> },
+      { path: 'contacts', element: <MyContactCardPage /> },
+      { path: 'contacts/find', element: <FindPersonPage /> },
     ],
   },
 ]);
