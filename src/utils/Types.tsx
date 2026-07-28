@@ -1,5 +1,3 @@
-import { Coin } from 'qapp-core';
-
 export type TransactionType =
   | 'GENESIS'
   | 'PAYMENT'
@@ -60,13 +58,17 @@ export interface SearchTransactionsResponse {
   amount: string;
 }
 
-export interface AddressBookEntry {
-  id: string; // Unique identifier (UUID or timestamp-based)
-  name: string; // Max 50 chars
-  address: string; // Coin-specific length
-  note: string; // Max 200 chars
-  qortAddress?: string;
-  coinType: Coin; // e.g., 'BTC', 'DOGE', 'LTC'
-  createdAt: number; // Unix timestamp
-  updatedAt?: number; // Unix timestamp (optional)
+export interface ContactCardQDNData {
+  version: 1;
+  lastUpdated: number; // Unix timestamp
+  addresses: Record<string, string>; // coin key (e.g. "BTC") -> address
 }
+
+export type ContactCardDecision = 'published' | 'private' | 'undecided';
+
+export interface ContactCardCoinState {
+  decision: ContactCardDecision;
+  overrideAddress?: string;
+}
+
+export type ContactCardLocalState = Record<string, ContactCardCoinState>;
