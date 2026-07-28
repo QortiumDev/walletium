@@ -26,6 +26,7 @@ import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import PersonRemoveAlt1Icon from '@mui/icons-material/PersonRemoveAlt1';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import ContactsIcon from '@mui/icons-material/Contacts';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import NotificationsOffIcon from '@mui/icons-material/NotificationsOff';
 import { useAtom, useAtomValue } from 'jotai';
@@ -539,6 +540,25 @@ export function TopBar() {
             aria-label="all transactions"
           >
             <ReceiptLongIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+
+        {/* Contact cards */}
+        <Tooltip title="Contact cards" placement="bottom">
+          <IconButton
+            size="small"
+            onClick={() =>
+              navigate(pathname.startsWith('/contacts') ? '/' : '/contacts')
+            }
+            sx={{
+              ...buttonSx,
+              color: pathname.startsWith('/contacts')
+                ? c.accent
+                : c.textSecondary,
+            }}
+            aria-label="contact cards"
+          >
+            <ContactsIcon fontSize="small" />
           </IconButton>
         </Tooltip>
 
