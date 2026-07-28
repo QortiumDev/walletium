@@ -1,3 +1,4 @@
+import { objectToBase64 } from 'qapp-core';
 import type { ContactCardLocalState, ContactCardQDNData } from './Types';
 
 const IDENTIFIER = 'walletium-contactcard';
@@ -115,12 +116,14 @@ export async function publishContactCard(
       // Nothing to delete on the first-ever publish - proceed regardless.
     }
 
+    const base64 = await objectToBase64(data);
+
     await qdnRequest({
       action: 'PUBLISH_QDN_RESOURCE',
       service: SERVICE,
       name: userName,
       identifier: IDENTIFIER,
-      base64: data as unknown as string,
+      base64,
     });
 
     return { publishedAt: lastUpdated };

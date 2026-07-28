@@ -1,4 +1,12 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+
+// Override the global qapp-core mock (from setup.ts) to include objectToBase64,
+// which contactCardQDN.ts uses to encode the publish payload. The mock keeps
+// the encoded output inspectable (JSON string) so tests can assert on shape.
+vi.mock('qapp-core', () => ({
+  objectToBase64: vi.fn(async (obj: unknown) => JSON.stringify(obj)),
+}));
+
 import {
   debouncedPublishContactCard,
   fetchContactCard,
@@ -119,7 +127,8 @@ describe('publishContactCard', () => {
     expect(publishCall.name).toBe('Alice');
     expect(publishCall.service).toBe('DOCUMENT');
     expect(publishCall.identifier).toBe('walletium-contactcard');
-    expect(publishCall.base64).toMatchObject({
+    const publishedData = JSON.parse(publishCall.base64 as string);
+    expect(publishedData).toMatchObject({
       version: 1,
       addresses: { BTC: 'bc1qmywalletaddress', DOGE: 'D-cold-storage' },
     });
@@ -128,7 +137,8 @@ describe('publishContactCard', () => {
   it('never includes a "private" coin in the published addresses', async () => {
     await publishContactCard(LOCAL_STATE, 'Alice');
     const publishCall = calls.find((c) => c.action === 'PUBLISH_QDN_RESOURCE')!;
-    expect(publishCall.base64).not.toHaveProperty('addresses.LTC');
+    const publishedData = JSON.parse(publishCall.base64 as string);
+    expect(publishedData.addresses).not.toHaveProperty('LTC');
   });
 
   it('deletes the old resource before publishing the new one, in that order', async () => {
