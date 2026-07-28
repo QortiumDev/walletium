@@ -1,4 +1,4 @@
-import type { ContactCardQDNData } from './Types';
+import type { ContactCardLocalState, ContactCardQDNData } from './Types';
 
 const IDENTIFIER = 'walletium-contactcard';
 const SERVICE = 'DOCUMENT';
@@ -45,4 +45,102 @@ export async function fetchContactCard(
   }
 
   return { status: 'found', data };
+}
+
+async function ensureAccountUnlocked(): Promise<boolean> {
+  const result = (await qdnRequest({
+    action: 'UNLOCK_SELECTED_ACCOUNT',
+  })) as { isUnlocked?: boolean } | null;
+  return result?.isUnlocked === true;
+}
+
+async function resolveAddressForCoin(
+  coin: string,
+  overrideAddress: string | undefined
+): Promise<string | null> {
+  if (overrideAddress) return overrideAddress;
+  try {
+    const res = (await qdnRequest(
+      coin === 'QORT'
+        ? { action: 'GET_USER_WALLET', assetId: 0 }
+        : { action: 'GET_USER_WALLET', coin }
+    )) as { address?: string } | null;
+    return res?.address ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function publishContactCard(
+  localState: ContactCardLocalState,
+  userName: string
+): Promise<{ publishedAt: number } | null> {
+  try {
+    if (!(await ensureAccountUnlocked())) return null;
+
+    const publishedCoins = Object.entries(localState).filter(
+      ([, state]) => state.decision === 'published'
+    );
+
+    const resolved = await Promise.all(
+      publishedCoins.map(async ([coin, state]) => {
+        const address = await resolveAddressForCoin(
+          coin,
+          state.overrideAddress
+        );
+        return address ? ([coin, address] as const) : null;
+      })
+    );
+
+    const addresses: Record<string, string> = {};
+    for (const entry of resolved) {
+      if (entry) addresses[entry[0]] = entry[1];
+    }
+
+    const lastUpdated = Date.now();
+    const data: ContactCardQDNData = {
+      version: 1,
+      lastUpdated,
+      addresses,
+    };
+
+    try {
+      await qdnRequest({
+        action: 'DELETE_QDN_RESOURCE',
+        service: SERVICE,
+        name: userName,
+        identifier: IDENTIFIER,
+      });
+    } catch {
+      // Nothing to delete on the first-ever publish - proceed regardless.
+    }
+
+    await qdnRequest({
+      action: 'PUBLISH_QDN_RESOURCE',
+      service: SERVICE,
+      name: userName,
+      identifier: IDENTIFIER,
+      base64: data as unknown as string,
+    });
+
+    return { publishedAt: lastUpdated };
+  } catch (error) {
+    console.error('Contact Card: Error publishing', error);
+    return null;
+  }
+}
+
+let publishTimeout: ReturnType<typeof setTimeout> | null = null;
+
+export function debouncedPublishContactCard(
+  localState: ContactCardLocalState,
+  userName: string,
+  delay = 2000
+): void {
+  if (publishTimeout) clearTimeout(publishTimeout);
+  publishTimeout = setTimeout(() => {
+    publishContactCard(localState, userName).catch((err) =>
+      console.error('Contact Card: Failed to publish', err)
+    );
+  }, delay);
 }
