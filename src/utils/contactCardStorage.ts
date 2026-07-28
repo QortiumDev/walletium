@@ -12,7 +12,8 @@ export function getContactCardLocalState(): ContactCardLocalState {
     if (!raw) return {};
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
+  } catch (error) {
+    console.warn('Contact Card: Error loading local state', error);
     return {};
   }
 }
@@ -31,7 +32,9 @@ export function setCoinDecision(
   decision: ContactCardDecision
 ): ContactCardLocalState {
   const state = getContactCardLocalState();
-  const current = state[coin] ?? { decision: 'undecided' as ContactCardDecision };
+  const current = state[coin] ?? {
+    decision: 'undecided' as ContactCardDecision,
+  };
   return save({ ...state, [coin]: { ...current, decision } });
 }
 
@@ -40,7 +43,9 @@ export function setCoinOverrideAddress(
   overrideAddress: string | undefined
 ): ContactCardLocalState {
   const state = getContactCardLocalState();
-  const current = state[coin] ?? { decision: 'undecided' as ContactCardDecision };
+  const current = state[coin] ?? {
+    decision: 'undecided' as ContactCardDecision,
+  };
   const nextEntry: ContactCardCoinState = overrideAddress
     ? { decision: current.decision, overrideAddress }
     : { decision: current.decision };
