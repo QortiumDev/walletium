@@ -106,4 +106,22 @@ describe('ContactCardCoinRow', () => {
     renderRow({ decision: 'published', overrideAddress: 'bc1qcoldstorage' });
     expect(screen.getByDisplayValue('bc1qcoldstorage')).toBeInTheDocument();
   });
+
+  it('displays the override address, not the fetched wallet address, in the address line', async () => {
+    renderRow({ decision: 'published', overrideAddress: 'bc1qcoldstorage' });
+
+    // The override address must win over whatever GET_USER_WALLET returns.
+    expect(await screen.findByText('bc1qcoldstorage')).toBeInTheDocument();
+    expect(screen.queryByText('bc1qmywalletaddress')).not.toBeInTheDocument();
+  });
+
+  it('still renders the loading placeholder instead of crashing when qdnRequest rejects', async () => {
+    (globalThis as any).qdnRequest = vi.fn(async () => {
+      throw new Error('user rejected wallet request');
+    });
+
+    renderRow();
+
+    expect(await screen.findByText('loading address…')).toBeInTheDocument();
+  });
 });

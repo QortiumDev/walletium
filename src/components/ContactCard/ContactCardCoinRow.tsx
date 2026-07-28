@@ -33,6 +33,11 @@ export function ContactCardCoinRow({
 }: Props) {
   const { t } = useTranslation(['core']);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  // derived from props at mount only; assumes state only changes via our own
+  // callbacks (onDecisionChange/onOverrideChange) - if a parent ever mutates
+  // state.overrideAddress independently of those callbacks (e.g. resetting
+  // the form, or reusing this component instance for a different chain
+  // without changing its key), this will go stale and needs a resync effect.
   const [overrideOpen, setOverrideOpen] = useState(!!state.overrideAddress);
   const [overrideValue, setOverrideValue] = useState(
     state.overrideAddress ?? EMPTY_STRING
