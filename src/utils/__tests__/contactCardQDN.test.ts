@@ -212,4 +212,67 @@ describe('debouncedPublishContactCard', () => {
 
     expect(calls.filter((a) => a === 'PUBLISH_QDN_RESOURCE')).toHaveLength(1);
   });
+
+  it('waits for an in-flight publish to finish before starting the next one, instead of overlapping them', async () => {
+    const calls: string[] = [];
+    let resolveFirstPublish: ((value: { success: true }) => void) | null = null;
+    let publishCallCount = 0;
+
+    (global as any).qdnRequest = vi.fn(async (req: Record<string, unknown>) => {
+      calls.push(req.action as string);
+      if (req.action === 'UNLOCK_SELECTED_ACCOUNT') return { isUnlocked: true };
+      if (req.action === 'GET_USER_WALLET') return { address: 'addr' };
+      if (req.action === 'DELETE_QDN_RESOURCE') return { success: true };
+      if (req.action === 'PUBLISH_QDN_RESOURCE') {
+        publishCallCount += 1;
+        if (publishCallCount === 1) {
+          // Simulate the user being slow to approve the native dialog: this
+          // promise only resolves once the test explicitly resolves it.
+          return new Promise((resolve) => {
+            resolveFirstPublish = resolve;
+          });
+        }
+        return { success: true };
+      }
+      throw new Error(`unexpected action ${req.action}`);
+    });
+
+    const state: ContactCardLocalState = { BTC: { decision: 'published' } };
+
+    // First edit debounces, then fires and starts publishing - it blocks
+    // waiting for approval of PUBLISH_QDN_RESOURCE.
+    debouncedPublishContactCard(state, 'Alice', 50);
+    await vi.advanceTimersByTimeAsync(60);
+
+    expect(calls.filter((a) => a === 'PUBLISH_QDN_RESOURCE')).toHaveLength(1);
+    expect(resolveFirstPublish).not.toBeNull();
+
+    // A second edit arrives (e.g. the user toggled another coin) while the
+    // first publish is still awaiting approval. Its debounce timer fires too.
+    debouncedPublishContactCard(state, 'Alice', 50);
+    await vi.advanceTimersByTimeAsync(60);
+
+    // Without the in-flight guard, this second timer firing would start a
+    // second, overlapping publishContactCard() call immediately - producing a
+    // second UNLOCK_SELECTED_ACCOUNT/DELETE_QDN_RESOURCE/PUBLISH_QDN_RESOURCE
+    // sequence right away. With the guard, it must wait for the first publish
+    // to finish, so no new calls should have been made yet.
+    expect(calls.filter((a) => a === 'UNLOCK_SELECTED_ACCOUNT')).toHaveLength(
+      1
+    );
+    expect(calls.filter((a) => a === 'PUBLISH_QDN_RESOURCE')).toHaveLength(1);
+
+    // Now let the first publish's approval resolve, unblocking it.
+    resolveFirstPublish!({ success: true });
+    await vi.advanceTimersByTimeAsync(0);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // The second publish should now have run to completion, sequentially
+    // after the first - not concurrently with it.
+    expect(calls.filter((a) => a === 'UNLOCK_SELECTED_ACCOUNT')).toHaveLength(
+      2
+    );
+    expect(calls.filter((a) => a === 'PUBLISH_QDN_RESOURCE')).toHaveLength(2);
+  });
 });
