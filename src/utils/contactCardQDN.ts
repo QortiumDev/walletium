@@ -135,6 +135,13 @@ export async function publishContactCard(
 
 let publishTimeout: ReturnType<typeof setTimeout> | null = null;
 
+// Tracks the currently-running publish, if any. Guards against a new debounced
+// publish overlapping with one still awaiting user approval (DELETE_QDN_RESOURCE
+// and PUBLISH_QDN_RESOURCE can each block on a native approval dialog for up to
+// 120s) - without this, two publishContactCard() calls could interleave their
+// delete/publish requests and let a stale localState overwrite a newer one.
+let inFlightPublish: Promise<{ publishedAt: number } | null> | null = null;
+
 export function debouncedPublishContactCard(
   localState: ContactCardLocalState,
   userName: string,
@@ -142,8 +149,19 @@ export function debouncedPublishContactCard(
 ): void {
   if (publishTimeout) clearTimeout(publishTimeout);
   publishTimeout = setTimeout(() => {
-    publishContactCard(localState, userName).catch((err) =>
-      console.error('Contact Card: Failed to publish', err)
-    );
+    const run = async () => {
+      if (inFlightPublish) {
+        await inFlightPublish.catch(() => {});
+      }
+      inFlightPublish = publishContactCard(localState, userName);
+      try {
+        await inFlightPublish;
+      } catch (err) {
+        console.error('Contact Card: Failed to publish', err);
+      } finally {
+        inFlightPublish = null;
+      }
+    };
+    run();
   }, delay);
 }
