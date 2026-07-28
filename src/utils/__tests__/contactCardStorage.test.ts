@@ -48,6 +48,18 @@ describe('contactCardStorage', () => {
     expect(getCoinState('BTC')).toEqual({ decision: 'published' });
   });
 
+  it('setCoinOverrideAddress on a coin with no prior setCoinDecision defaults to "undecided"', () => {
+    const next = setCoinOverrideAddress('BTC', 'bc1qcoldstorageaddress');
+    expect(next.BTC).toEqual({
+      decision: 'undecided',
+      overrideAddress: 'bc1qcoldstorageaddress',
+    });
+    expect(getCoinState('BTC')).toEqual({
+      decision: 'undecided',
+      overrideAddress: 'bc1qcoldstorageaddress',
+    });
+  });
+
   it('survives malformed JSON in localStorage by returning an empty state', () => {
     localStorage.setItem('walletium-contactcard-local', 'not json');
     expect(getContactCardLocalState()).toEqual({});
