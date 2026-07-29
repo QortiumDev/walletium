@@ -44,10 +44,9 @@ vi.mock('../../../hooks/useSupportedChains', () => ({
   }),
 }));
 
-const debouncedPublishContactCard = vi.fn();
+const publishContactCard = vi.fn();
 vi.mock('../../../utils/contactCardQDN', () => ({
-  debouncedPublishContactCard: (...args: unknown[]) =>
-    debouncedPublishContactCard(...args),
+  publishContactCard: (...args: unknown[]) => publishContactCard(...args),
 }));
 
 function LocationProbe() {
@@ -61,7 +60,8 @@ describe('MyContactCardPage', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('en');
     localStorage.clear();
-    debouncedPublishContactCard.mockClear();
+    publishContactCard.mockReset();
+    publishContactCard.mockResolvedValue({ publishedAt: 1 });
     (globalThis as any).qdnRequest = vi.fn(async () => ({ address: 'addr' }));
   });
 
@@ -87,23 +87,50 @@ describe('MyContactCardPage', () => {
     expect(rows.getByText('LTC')).toBeInTheDocument();
   });
 
-  it('shows the completeness banner for coins with no saved decision', () => {
+  it('shows every coin switched on (public) by default', () => {
     renderPage();
-    expect(screen.getByText(/2 coin/i)).toBeInTheDocument();
+    for (const sw of screen.getAllByRole('switch')) {
+      expect(sw).toBeChecked();
+    }
   });
 
-  it('publishing debounced when a switch is toggled, and the banner count drops', async () => {
+  it('toggling a switch updates it locally without publishing anything', async () => {
     const user = userEvent.setup();
     renderPage();
 
-    const switches = screen.getAllByRole('switch');
-    await user.click(switches[0]);
+    await user.click(screen.getAllByRole('switch')[0]);
 
-    expect(debouncedPublishContactCard).toHaveBeenCalledWith(
-      expect.objectContaining({ BTC: { decision: 'published' } }),
+    expect(screen.getAllByRole('switch')[0]).not.toBeChecked();
+    expect(publishContactCard).not.toHaveBeenCalled();
+  });
+
+  it('publishing sends every chain in one call, including ones never touched', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    // Turn BTC private; LTC is left untouched and should still publish as
+    // "published" since coins are public by default.
+    await user.click(screen.getAllByRole('switch')[0]);
+    await user.click(screen.getByRole('button', { name: /^publish$/i }));
+
+    expect(publishContactCard).toHaveBeenCalledWith(
+      {
+        BTC: { decision: 'private' },
+        LTC: { decision: 'published' },
+      },
       'Alice'
     );
-    expect(screen.getByText(/1 coin/i)).toBeInTheDocument();
+    expect(await screen.findByText(/published to qdn/i)).toBeInTheDocument();
+  });
+
+  it('shows an error status when publishing fails', async () => {
+    publishContactCard.mockResolvedValue(null);
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: /^publish$/i }));
+
+    expect(await screen.findByText(/publish failed/i)).toBeInTheDocument();
   });
 
   it('navigates to the find-a-person page when the button is clicked', async () => {

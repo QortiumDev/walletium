@@ -1,26 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { resolveContact, missingCoinsForCard } from '../resolveContact';
+import { resolveContact } from '../resolveContact';
 import * as contactCardQDN from '../contactCardQDN';
-import type { ChainConfig } from '../../config/chains';
-import type { ContactCardLocalState } from '../Types';
 
 vi.mock('../contactCardQDN');
-
-const CHAIN_BTC: ChainConfig = {
-  key: 'BTC',
-  name: 'Bitcoin',
-  ticker: 'BTC',
-  coinEnum: 'BTC',
-  route: 'bitcoin',
-  defaultFee: 0.00001,
-  isNative: false,
-  decimalPlaces: 8,
-  activeNetwork: 'MAIN',
-  supportsHtlc: true,
-  supportsLocalChainTrades: true,
-};
-
-const CHAIN_LTC: ChainConfig = { ...CHAIN_BTC, key: 'LTC', ticker: 'LTC' };
 
 describe('resolveContact', () => {
   afterEach(() => {
@@ -119,29 +101,5 @@ describe('resolveContact', () => {
     expect(qdnMock).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Alice' })
     );
-  });
-});
-
-describe('missingCoinsForCard', () => {
-  it('returns chains with no saved decision', () => {
-    const state: ContactCardLocalState = { BTC: { decision: 'published' } };
-    expect(missingCoinsForCard(state, [CHAIN_BTC, CHAIN_LTC])).toEqual([
-      CHAIN_LTC,
-    ]);
-  });
-
-  it('does not flag a coin explicitly marked private', () => {
-    const state: ContactCardLocalState = {
-      BTC: { decision: 'published' },
-      LTC: { decision: 'private' },
-    };
-    expect(missingCoinsForCard(state, [CHAIN_BTC, CHAIN_LTC])).toEqual([]);
-  });
-
-  it('returns all chains when local state is empty', () => {
-    expect(missingCoinsForCard({}, [CHAIN_BTC, CHAIN_LTC])).toEqual([
-      CHAIN_BTC,
-      CHAIN_LTC,
-    ]);
   });
 });

@@ -1,77 +1,169 @@
 import { useMemo, useState } from 'react';
-import { Box, Button, Typography } from '@mui/material';
+import { Box, Button, IconButton } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { useAtomValue } from 'jotai';
 import { useGlobal } from 'qapp-core';
 import { useSupportedChains } from '../../hooks/useSupportedChains';
+import { uiStyleAtom } from '../../state/global/system';
+import { useColors } from '../../theme/ColorTokensContext';
+import { tokens } from '../../theme/tokens';
 import {
   getContactCardLocalState,
   setCoinDecision,
   setCoinOverrideAddress,
 } from '../../utils/contactCardStorage';
-import { debouncedPublishContactCard } from '../../utils/contactCardQDN';
-import { missingCoinsForCard } from '../../utils/resolveContact';
+import { publishContactCard } from '../../utils/contactCardQDN';
 import type { ContactCardLocalState } from '../../utils/Types';
 import { ContactCardCoinRow } from './ContactCardCoinRow';
-import { ContactCardCompletenessBanner } from './ContactCardCompletenessBanner';
+
+type PublishStatus = 'saving' | 'published' | 'error';
 
 export function MyContactCardPage() {
   const { t } = useTranslation(['core']);
   const navigate = useNavigate();
+  const c = useColors();
+  const uiStyle = useAtomValue(uiStyleAtom);
+  const isClassic = uiStyle === 'classic';
   const { chains } = useSupportedChains();
   const userName = useGlobal().auth.name as string | undefined;
   const [localState, setLocalState] = useState<ContactCardLocalState>(() =>
     getContactCardLocalState()
   );
-
-  const missingChains = useMemo(
-    () => missingCoinsForCard(localState, chains),
-    [localState, chains]
+  const [publishStatus, setPublishStatus] = useState<PublishStatus | null>(
+    null
   );
+
+  // Coins are public by default (see contactCardStorage's DEFAULT_DECISION),
+  // so untouched chains need an explicit entry here too - otherwise they'd
+  // show as "published" in the switches but be silently left out of what
+  // actually gets sent to publishContactCard, which only reads localState.
+  const effectiveState = useMemo(() => {
+    const merged: ContactCardLocalState = {};
+    for (const chain of chains) {
+      merged[chain.key] = localState[chain.key] ?? { decision: 'published' };
+    }
+    return merged;
+  }, [localState, chains]);
 
   const handleDecisionChange = (
     coin: string,
     decision: 'published' | 'private'
   ) => {
-    const next = setCoinDecision(coin, decision);
-    setLocalState(next);
-    if (userName) debouncedPublishContactCard(next, userName);
+    setLocalState(setCoinDecision(coin, decision));
   };
 
   const handleOverrideChange = (coin: string, address: string | undefined) => {
-    const next = setCoinOverrideAddress(coin, address);
-    setLocalState(next);
-    if (userName) debouncedPublishContactCard(next, userName);
+    setLocalState(setCoinOverrideAddress(coin, address));
+  };
+
+  const handlePublish = async () => {
+    if (!userName || publishStatus === 'saving') return;
+    setPublishStatus('saving');
+    const result = await publishContactCard(effectiveState, userName);
+    setPublishStatus(result ? 'published' : 'error');
   };
 
   return (
-    <Box sx={{ maxWidth: 720, mx: 'auto', p: 3 }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: isClassic ? c.frameBg : c.bg }}>
       <Box
         sx={{
+          position: 'sticky',
+          top: `var(--wallet-top-bar-height, ${tokens.spacing.topBarHeight}px)`,
+          zIndex: 90,
+          bgcolor: c.surface,
+          borderBottom: `${
+            isClassic
+              ? tokens.shape.classicBorderWidth
+              : tokens.shape.borderWidth
+          } solid ${isClassic ? c.border : c.borderLight}`,
+          boxShadow: isClassic ? c.topBarShadow : 'none',
           display: 'flex',
-          justifyContent: 'space-between',
           alignItems: 'center',
-          mb: 2,
+          px: { xs: isClassic ? 1.5 : 3, sm: 3 },
+          py: isClassic ? 1 : 0,
+          minHeight: tokens.spacing.topBarHeight,
+          gap: 2,
         }}
       >
-        <Typography variant="h4">
+        <IconButton
+          onClick={() => navigate('/')}
+          size="small"
+          sx={{ borderRadius: 0, color: c.textPrimary }}
+        >
+          <ArrowBackIcon fontSize="small" />
+        </IconButton>
+        <Box
+          sx={{
+            fontWeight: tokens.typography.weightBold,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            fontSize: '0.85rem',
+          }}
+        >
           {t('core:contact_card_my_card_title')}
-        </Typography>
-        <Button variant="outlined" onClick={() => navigate('/contacts/find')}>
+        </Box>
+        <Box sx={{ flexGrow: 1 }} />
+        {publishStatus && (
+          <Box
+            sx={{
+              fontSize: '0.75rem',
+              color: publishStatus === 'error' ? c.error : c.textSecondary,
+            }}
+          >
+            {t(`core:contact_card_status_${publishStatus}`)}
+          </Box>
+        )}
+        <Button
+          size="small"
+          variant="contained"
+          disabled={!userName || publishStatus === 'saving'}
+          onClick={handlePublish}
+        >
+          {t('core:contact_card_publish_button')}
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={() => navigate('/contacts/find')}
+        >
           {t('core:contact_card_find_person_title')}
         </Button>
       </Box>
-      <ContactCardCompletenessBanner missingChains={missingChains} />
-      <Box data-testid="contact-card-rows">
-        {chains.map((chain) => (
-          <ContactCardCoinRow
-            key={chain.key}
-            chain={chain}
-            state={localState[chain.key] ?? { decision: 'undecided' }}
-            onDecisionChange={handleDecisionChange}
-            onOverrideChange={handleOverrideChange}
-          />
-        ))}
+      <Box sx={{ maxWidth: 720, mx: 'auto', p: 3 }}>
+        <Box
+          sx={{
+            mb: 2,
+            px: 2.5,
+            py: 1.5,
+            fontSize: '0.78rem',
+            color: c.textSecondary,
+            border: `${
+              isClassic
+                ? tokens.shape.classicBorderWidth
+                : tokens.shape.borderWidth
+            } solid ${isClassic ? c.border : c.borderLight}`,
+            borderRadius: `${isClassic ? tokens.shape.radiusMd : tokens.shape.radius}px`,
+            bgcolor: c.surface,
+          }}
+        >
+          {t('core:contact_card_publish_explainer')}
+        </Box>
+        <Box
+          data-testid="contact-card-rows"
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
+        >
+          {chains.map((chain) => (
+            <ContactCardCoinRow
+              key={chain.key}
+              chain={chain}
+              state={effectiveState[chain.key]}
+              onDecisionChange={handleDecisionChange}
+              onOverrideChange={handleOverrideChange}
+            />
+          ))}
+        </Box>
       </Box>
     </Box>
   );

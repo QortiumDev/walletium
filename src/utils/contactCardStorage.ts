@@ -18,8 +18,12 @@ export function getContactCardLocalState(): ContactCardLocalState {
   }
 }
 
+// Coins default to "published" - contact cards are public by default and the
+// user opts individual coins out to "private", rather than opting each one in.
+const DEFAULT_DECISION: ContactCardDecision = 'published';
+
 export function getCoinState(coin: string): ContactCardCoinState {
-  return getContactCardLocalState()[coin] ?? { decision: 'undecided' };
+  return getContactCardLocalState()[coin] ?? { decision: DEFAULT_DECISION };
 }
 
 function save(next: ContactCardLocalState): ContactCardLocalState {
@@ -32,9 +36,7 @@ export function setCoinDecision(
   decision: ContactCardDecision
 ): ContactCardLocalState {
   const state = getContactCardLocalState();
-  const current = state[coin] ?? {
-    decision: 'undecided' as ContactCardDecision,
-  };
+  const current = state[coin] ?? { decision: DEFAULT_DECISION };
   return save({ ...state, [coin]: { ...current, decision } });
 }
 
@@ -43,9 +45,7 @@ export function setCoinOverrideAddress(
   overrideAddress: string | undefined
 ): ContactCardLocalState {
   const state = getContactCardLocalState();
-  const current = state[coin] ?? {
-    decision: 'undecided' as ContactCardDecision,
-  };
+  const current = state[coin] ?? { decision: DEFAULT_DECISION };
   const nextEntry: ContactCardCoinState = overrideAddress
     ? { decision: current.decision, overrideAddress }
     : { decision: current.decision };

@@ -1,6 +1,4 @@
 import { fetchContactCard } from './contactCardQDN';
-import type { ChainConfig } from '../config/chains';
-import type { ContactCardLocalState } from './Types';
 
 export type ContactResolution =
   | { status: 'resolved'; address: string; coin: string; name: string }
@@ -38,13 +36,4 @@ export async function resolveContact(
   }
 
   return { status: 'resolved', address, coin, name: trimmedName };
-}
-
-export function missingCoinsForCard(
-  localState: ContactCardLocalState,
-  chains: ChainConfig[]
-): ChainConfig[] {
-  return chains.filter(
-    (chain) => (localState[chain.key]?.decision ?? 'undecided') === 'undecided'
-  );
 }

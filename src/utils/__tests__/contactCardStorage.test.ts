@@ -15,8 +15,8 @@ describe('contactCardStorage', () => {
     expect(getContactCardLocalState()).toEqual({});
   });
 
-  it('returns "undecided" for a coin with no saved state', () => {
-    expect(getCoinState('BTC')).toEqual({ decision: 'undecided' });
+  it('returns "published" for a coin with no saved state (public by default)', () => {
+    expect(getCoinState('BTC')).toEqual({ decision: 'published' });
   });
 
   it('setCoinDecision persists the decision and returns the updated state', () => {
@@ -48,14 +48,14 @@ describe('contactCardStorage', () => {
     expect(getCoinState('BTC')).toEqual({ decision: 'published' });
   });
 
-  it('setCoinOverrideAddress on a coin with no prior setCoinDecision defaults to "undecided"', () => {
+  it('setCoinOverrideAddress on a coin with no prior setCoinDecision defaults to "published"', () => {
     const next = setCoinOverrideAddress('BTC', 'bc1qcoldstorageaddress');
     expect(next.BTC).toEqual({
-      decision: 'undecided',
+      decision: 'published',
       overrideAddress: 'bc1qcoldstorageaddress',
     });
     expect(getCoinState('BTC')).toEqual({
-      decision: 'undecided',
+      decision: 'published',
       overrideAddress: 'bc1qcoldstorageaddress',
     });
   });
