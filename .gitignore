@@ -14,6 +14,7 @@ dist-ssr
 *.local
 
 .claude
+docs/superpowers/
 
 # Tests
 coverage
