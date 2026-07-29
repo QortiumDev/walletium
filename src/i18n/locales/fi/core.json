@@ -8,7 +8,6 @@
     "close": "sulje",
     "copy_address": "kopioi osoite",
     "copy_hash": "kopioi hash: {{ hash }}",
-    "double_click_addressbook": "kaksoisnapsauta lisätäksesi osoitekirjaan\n{{ address }}",
     "force_sync": "pakota synkronointi",
     "refresh": "päivitä",
     "remove": "poista",

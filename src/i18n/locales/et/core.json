@@ -8,7 +8,6 @@
     "close": "Sulge",
     "copy_address": "Kopeeri aadress",
     "copy_hash": "Kopeeri räsi: {{ hash }}",
-    "double_click_addressbook": "topeltklõpsake aadressiraamatusse lisamiseks\n{{ address }}",
     "force_sync": "Sunni sünkroonimist",
     "refresh": "Värskenda",
     "remove": "Eemalda",

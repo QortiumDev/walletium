@@ -8,7 +8,6 @@
     "close": "閉じる",
     "copy_address": "アドレスをコピー",
     "copy_hash": "ハッシュをコピー: {{ hash }}",
-    "double_click_addressbook": "ダブルクリックでアドレス帳に追加\n{{ address }}",
     "force_sync": "同期を強制",
     "refresh": "更新",
     "remove": "削除",

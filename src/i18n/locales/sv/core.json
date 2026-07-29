@@ -8,7 +8,6 @@
     "close": "stäng",
     "copy_address": "kopiera adress",
     "copy_hash": "kopiera hash: {{ hash }}",
-    "double_click_addressbook": "dubbelklicka för att lägga till i adressboken\n{{ address }}",
     "force_sync": "tvinga synkronisering",
     "refresh": "uppdatera",
     "remove": "ta bort",

@@ -8,7 +8,6 @@
     "close": "sluiten",
     "copy_address": "adres kopiëren",
     "copy_hash": "hash kopiëren: {{ hash }}",
-    "double_click_addressbook": "dubbelklik om toe te voegen aan adresboek\n{{ address }}",
     "force_sync": "synchronisatie forceren",
     "refresh": "vernieuwen",
     "remove": "verwijderen",

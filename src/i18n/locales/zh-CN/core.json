@@ -8,7 +8,6 @@
     "close": "关闭",
     "copy_address": "复制地址",
     "copy_hash": "复制哈希：{{ hash }}",
-    "double_click_addressbook": "双击添加到地址簿：{{ address }}",
     "force_sync": "强制同步",
     "refresh": "刷新",
     "remove": "移除",

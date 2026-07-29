@@ -8,7 +8,6 @@
     "close": "bezárás",
     "copy_address": "cím másolása",
     "copy_hash": "hash másolása: {{ hash }}",
-    "double_click_addressbook": "dupla kattintással hozzáadod a címjegyzékhez\n{{ address }}",
     "force_sync": "szinkronizálás kényszerítése",
     "refresh": "frissítés",
     "remove": "eltávolítás",

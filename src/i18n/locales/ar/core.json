@@ -8,7 +8,6 @@
     "close": "إغلاق",
     "copy_address": "نسخ العنوان",
     "copy_hash": "نسخ التجزئة: {{ hash }}",
-    "double_click_addressbook": "انقر نقرًا مزدوجًا للإضافة إلى دفتر العناوين\n{{ address }}",
     "force_sync": "فرض المزامنة",
     "refresh": "تحديث",
     "remove": "إزالة",

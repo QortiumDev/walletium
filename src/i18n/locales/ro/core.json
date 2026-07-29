@@ -8,7 +8,6 @@
     "close": "închide",
     "copy_address": "copiază adresa",
     "copy_hash": "copiază hash: {{ hash }}",
-    "double_click_addressbook": "dublu-clic pentru a adăuga în agenda de adrese\n{{ address }}",
     "force_sync": "forțează sincronizarea",
     "refresh": "reîncarcă",
     "remove": "elimină",

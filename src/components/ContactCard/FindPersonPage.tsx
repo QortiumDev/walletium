@@ -129,7 +129,7 @@ export function FindPersonPage() {
                 variant="outlined"
                 onClick={() =>
                   navigate(
-                    `/${chain.route}?to=${encodeURIComponent(
+                    `/${chain.route}?send=true&to=${encodeURIComponent(
                       addresses[chain.key]
                     )}&fromName=${encodeURIComponent(resolvedName)}`
                   )

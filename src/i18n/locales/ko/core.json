@@ -8,7 +8,6 @@
     "close": "닫기",
     "copy_address": "주소 복사",
     "copy_hash": "hash 복사: {{ hash }}",
-    "double_click_addressbook": "더블클릭하여 주소록에 추가\n{{ address }}",
     "force_sync": "강제 동기화",
     "refresh": "새로고침",
     "remove": "제거",
