@@ -548,13 +548,18 @@ export function TopBar() {
           <IconButton
             size="small"
             onClick={() =>
-              navigate(pathname.startsWith('/contacts') ? '/' : '/contacts')
+              navigate(
+                pathname === '/contacts' || pathname.startsWith('/contacts/')
+                  ? '/'
+                  : '/contacts'
+              )
             }
             sx={{
               ...buttonSx,
-              color: pathname.startsWith('/contacts')
-                ? c.accent
-                : c.textSecondary,
+              color:
+                pathname === '/contacts' || pathname.startsWith('/contacts/')
+                  ? c.accent
+                  : c.textSecondary,
             }}
             aria-label="contact cards"
           >

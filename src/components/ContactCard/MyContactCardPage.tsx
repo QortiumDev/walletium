@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Button, Typography } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { useGlobal } from 'qapp-core';
 import { useSupportedChains } from '../../hooks/useSupportedChains';
 import {
@@ -16,6 +17,7 @@ import { ContactCardCompletenessBanner } from './ContactCardCompletenessBanner';
 
 export function MyContactCardPage() {
   const { t } = useTranslation(['core']);
+  const navigate = useNavigate();
   const { chains } = useSupportedChains();
   const userName = useGlobal().auth.name as string | undefined;
   const [localState, setLocalState] = useState<ContactCardLocalState>(() =>
@@ -44,9 +46,21 @@ export function MyContactCardPage() {
 
   return (
     <Box sx={{ maxWidth: 720, mx: 'auto', p: 3 }}>
-      <Typography variant="h4" sx={{ mb: 2 }}>
-        {t('core:contact_card_my_card_title')}
-      </Typography>
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mb: 2,
+        }}
+      >
+        <Typography variant="h4">
+          {t('core:contact_card_my_card_title')}
+        </Typography>
+        <Button variant="outlined" onClick={() => navigate('/contacts/find')}>
+          {t('core:contact_card_find_person_title')}
+        </Button>
+      </Box>
       <ContactCardCompletenessBanner missingChains={missingChains} />
       <Box data-testid="contact-card-rows">
         {chains.map((chain) => (
