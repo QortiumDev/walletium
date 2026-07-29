@@ -465,12 +465,16 @@ describe('CoinDetail recipient-by-name flow', () => {
 
     await user.type(screen.getByLabelText(/amount \(BTC\)/i), '1.25');
 
-    // Change the recipient name again. This clears the old debounce and
-    // starts a fresh one that has NOT fired yet - the 800ms auto-resolution
-    // hasn't happened, so this window is exactly the "resolution pending"
-    // state the button must refuse to send through.
-    await user.clear(screen.getByLabelText(/recipient's qortium name/i));
-    await user.type(screen.getByLabelText(/recipient's qortium name/i), 'Bob');
+    // Edit the recipient name IN PLACE (append a character) rather than
+    // clearing it first. Clearing would trip the debounce effect's
+    // empty-name branch, which resets `recipient` to '' itself - that would
+    // make `recipientIsValid` alone disable the button, proving nothing
+    // about the resolution-status gate this test exists to cover. Keeping
+    // the field non-empty the whole time means `recipient` stays at the
+    // stale-but-syntactically-valid "Alice" address while a fresh,
+    // not-yet-fired debounce starts - the only thing that can disable the
+    // button in that window is `resolvingRecipient`/`resolution.status`.
+    await user.type(screen.getByLabelText(/recipient's qortium name/i), 'x');
 
     const confirm = screen.getByRole('button', { name: /confirm send/i });
     // Bounded well under the 800ms debounce: proves the button disables
