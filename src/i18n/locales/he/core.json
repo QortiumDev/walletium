@@ -8,7 +8,6 @@
     "close": "סגור",
     "copy_address": "העתק כתובת",
     "copy_hash": "העתק hash: {{ hash }}",
-    "double_click_addressbook": "לחץ פעמיים להוספה לספר הכתובות\n{{ address }}",
     "force_sync": "כפה סנכרון",
     "refresh": "רענן",
     "remove": "הסר",

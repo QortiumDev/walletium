@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ThemeProviderWrapper from '../../../styles/theme/theme-provider';
@@ -43,11 +43,19 @@ vi.mock('../../../hooks/useSupportedChains', () => ({
   }),
 }));
 
+function LocationProbe() {
+  const location = useLocation();
+  return (
+    <div data-testid="location">{location.pathname + location.search}</div>
+  );
+}
+
 function renderPage() {
   return render(
     <MemoryRouter>
       <ThemeProviderWrapper>
         <FindPersonPage />
+        <LocationProbe />
       </ThemeProviderWrapper>
     </MemoryRouter>
   );
@@ -128,5 +136,27 @@ describe('FindPersonPage', () => {
     expect(
       JSON.parse(localStorage.getItem('walletium-contact-mru') ?? '[]')
     ).toEqual(['Alice']);
+  });
+
+  it('navigates to the coin send flow with send=true when a resolved coin is clicked', async () => {
+    const user = userEvent.setup();
+    (globalThis as any).qdnRequest = vi.fn(async () => ({ owner: 'Q-addr' }));
+    vi.mocked(contactCardQDN.fetchContactCard).mockResolvedValue({
+      status: 'found',
+      data: { version: 1, lastUpdated: 1, addresses: { BTC: 'bc1qalice' } },
+    });
+
+    renderPage();
+    await user.type(screen.getByLabelText(/qortium name/i), 'Alice');
+    await user.click(screen.getByRole('button', { name: /^search$/i }));
+
+    await user.click(await screen.findByRole('button', { name: 'BTC' }));
+
+    const location = screen.getByTestId('location').textContent ?? '';
+    expect(location.startsWith('/bitcoin?')).toBe(true);
+    const params = new URLSearchParams(location.slice('/bitcoin?'.length));
+    expect(params.get('send')).toBe('true');
+    expect(params.get('to')).toBe('bc1qalice');
+    expect(params.get('fromName')).toBe('Alice');
   });
 });

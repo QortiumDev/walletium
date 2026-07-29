@@ -8,7 +8,6 @@
     "close": "close",
     "copy_address": "copy address",
     "copy_hash": "copy hash: {{ hash }}",
-    "double_click_addressbook": "double-click to add to address book\n{{ address }}",
     "force_sync": "force sync",
     "refresh": "refresh",
     "remove": "remove",
