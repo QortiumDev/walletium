@@ -9,7 +9,6 @@ import { TopBar } from './components/layout/TopBar';
 import { tokens } from './theme/tokens';
 import { useColors } from './theme/ColorTokensContext';
 import { EMPTY_STRING, TIME_MINUTES_1 } from './common/constants';
-import { syncAllAddressBooksOnStartup } from './utils/addressBookQDN';
 import { walletReadyAtom } from './state/global/system';
 import { useMarketPricesPoller } from './hooks/useMarketPricesPoller';
 import { usePaymentNotifications } from './hooks/usePaymentNotifications';
@@ -76,12 +75,6 @@ export default function AppLayout() {
     };
     if (setWalletState) setWalletState(session);
   }, [address, avatarUrl, name, setWalletState]);
-
-  useEffect(() => {
-    if (address && name) {
-      syncAllAddressBooksOnStartup(name).catch(() => {});
-    }
-  }, [address, name]);
 
   // Poll node info into context
   useEffect(() => {
