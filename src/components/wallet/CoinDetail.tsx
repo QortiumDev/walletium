@@ -129,6 +129,7 @@ export function CoinDetail({ chain }: Props) {
   const [recipientName, setRecipientName] = useState(EMPTY_STRING);
   const [resolution, setResolution] = useState<ContactResolution | null>(null);
   const [resolvingRecipient, setResolvingRecipient] = useState(false);
+  const [staleAddressWarning, setStaleAddressWarning] = useState(false);
   const [nativeFee, setNativeFee] = useState<string>('');
   const [foreignFeePerByte, setForeignFeePerByte] = useState<string>('');
   const [feeLoading, setFeeLoading] = useState(false);
@@ -427,6 +428,7 @@ export function CoinDetail({ chain }: Props) {
     setRecipientName(EMPTY_STRING);
     setResolution(null);
     setResolvingRecipient(false);
+    setStaleAddressWarning(false);
     setSendResult(null);
     setSendResponse(null);
     setNativeFee(chain.isNative ? String(chain.defaultFee) : '');
@@ -500,6 +502,7 @@ export function CoinDetail({ chain }: Props) {
         if (fresh.status !== 'resolved') return;
         if (fresh.address !== recipient) {
           setRecipient(fresh.address);
+          setStaleAddressWarning(true);
           return; // address changed since the field was filled - force re-confirmation
         }
         effectiveRecipient = fresh.address;
@@ -533,6 +536,7 @@ export function CoinDetail({ chain }: Props) {
       }
       setSendResponse(result);
       setSendResult('success');
+      setStaleAddressWarning(false);
 
       window.setTimeout(() => {
         fetchBalance();
@@ -557,6 +561,7 @@ export function CoinDetail({ chain }: Props) {
     setRecipientName(EMPTY_STRING);
     setResolution(null);
     setResolvingRecipient(false);
+    setStaleAddressWarning(false);
     setNativeFee('');
     setForeignFeePerByte('');
     setSearchParams({});
@@ -580,7 +585,12 @@ export function CoinDetail({ chain }: Props) {
     chain.coinEnum === 'ARRR' ||
     isOptionalPositiveDecimal(foreignFeePerByte, 8);
   const canConfirmSend =
-    !sending && amountIsValid && recipientIsValid && foreignFeeIsValid;
+    !sending &&
+    amountIsValid &&
+    recipientIsValid &&
+    foreignFeeIsValid &&
+    (recipientMode !== 'name' ||
+      (!resolvingRecipient && resolution?.status === 'resolved'));
   const showAmountError = amount !== '' && !amountIsValid;
   const showRecipientError = recipient !== '' && !recipientIsValid;
   const showFeeError =
@@ -1390,7 +1400,10 @@ export function CoinDetail({ chain }: Props) {
                     <TextField
                       label={t('send_dialog.recipient_name')}
                       value={recipientName}
-                      onChange={(e) => setRecipientName(e.target.value)}
+                      onChange={(e) => {
+                        setRecipientName(e.target.value);
+                        setStaleAddressWarning(false);
+                      }}
                       fullWidth
                       disabled={sending}
                     />
@@ -1419,6 +1432,11 @@ export function CoinDetail({ chain }: Props) {
                           )}
                         </Typography>
                       )}
+                    {staleAddressWarning && (
+                      <Typography variant="caption" sx={{ color: c.warning }}>
+                        {t('send_dialog.resolution_changed_reconfirm')}
+                      </Typography>
+                    )}
                   </>
                 )}
 

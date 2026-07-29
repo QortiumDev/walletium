@@ -353,5 +353,140 @@ describe('CoinDetail recipient-by-name flow', () => {
       expect(screen.getByText(/btc-new-address/i)).toBeInTheDocument()
     );
     expect(sendCalls(qdnRequestMock)).toHaveLength(0);
+    expect(
+      await screen.findByText(
+        /the resolved address changed - please review and confirm again/i
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('shows the name-not-found message and disables Confirm Send', async () => {
+    const user = userEvent.setup();
+    vi.mocked(resolveContactModule.resolveContact).mockResolvedValue({
+      status: 'name-not-found',
+      name: 'Ghost',
+    });
+
+    renderDetail();
+    await openSendDialog(user);
+    await user.click(screen.getByRole('button', { name: /^name$/i }));
+    await user.type(
+      screen.getByLabelText(/recipient's qortium name/i),
+      'Ghost'
+    );
+
+    expect(
+      await screen.findByText(/no Qortium name found matching "Ghost"/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /confirm send/i })
+    ).toBeDisabled();
+  });
+
+  it('shows the no-card message and disables Confirm Send', async () => {
+    const user = userEvent.setup();
+    vi.mocked(resolveContactModule.resolveContact).mockResolvedValue({
+      status: 'no-card',
+      name: 'Alice',
+    });
+
+    renderDetail();
+    await openSendDialog(user);
+    await user.click(screen.getByRole('button', { name: /^name$/i }));
+    await user.type(
+      screen.getByLabelText(/recipient's qortium name/i),
+      'Alice'
+    );
+
+    expect(
+      await screen.findByText(/alice doesn't have a contact card yet/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /confirm send/i })
+    ).toBeDisabled();
+  });
+
+  it('shows the fetch-failed message and disables Confirm Send', async () => {
+    const user = userEvent.setup();
+    vi.mocked(resolveContactModule.resolveContact).mockResolvedValue({
+      status: 'fetch-failed',
+      name: 'Alice',
+    });
+
+    renderDetail();
+    await openSendDialog(user);
+    await user.click(screen.getByRole('button', { name: /^name$/i }));
+    await user.type(
+      screen.getByLabelText(/recipient's qortium name/i),
+      'Alice'
+    );
+
+    expect(
+      await screen.findByText(/couldn't check right now - try again/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /confirm send/i })
+    ).toBeDisabled();
+  });
+
+  it('blocks Confirm Send while a new debounce is pending after the recipient name changes again', async () => {
+    // Uses real timers throughout. `resolvingRecipient` flips to true
+    // synchronously inside the debounce effect (before its setTimeout is
+    // even scheduled), so the button disables well within the 800ms window
+    // without needing to fake/advance any clock - avoiding the flakiness
+    // that comes from mixing userEvent's own timing with fake timers.
+    const user = userEvent.setup();
+    vi.mocked(resolveContactModule.resolveContact)
+      .mockResolvedValueOnce({
+        status: 'resolved',
+        address: 'btc-alice-address',
+        coin: 'BTC',
+        name: 'Alice',
+      })
+      .mockResolvedValueOnce({
+        status: 'resolved',
+        address: 'btc-bob-address',
+        coin: 'BTC',
+        name: 'Bob',
+      });
+
+    renderDetail();
+    await openSendDialog(user);
+    await user.click(screen.getByRole('button', { name: /^name$/i }));
+    await user.type(
+      screen.getByLabelText(/recipient's qortium name/i),
+      'Alice'
+    );
+
+    // Let the real 800ms debounce fire and resolve "Alice" before moving on.
+    expect(
+      await screen.findByText(/sending to Alice's BTC address/i)
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/amount \(BTC\)/i), '1.25');
+
+    // Change the recipient name again. This clears the old debounce and
+    // starts a fresh one that has NOT fired yet - the 800ms auto-resolution
+    // hasn't happened, so this window is exactly the "resolution pending"
+    // state the button must refuse to send through.
+    await user.clear(screen.getByLabelText(/recipient's qortium name/i));
+    await user.type(screen.getByLabelText(/recipient's qortium name/i), 'Bob');
+
+    const confirm = screen.getByRole('button', { name: /confirm send/i });
+    // Bounded well under the 800ms debounce: proves the button disables
+    // promptly once `recipientName` changes, not merely "eventually".
+    await waitFor(() => expect(confirm).toBeDisabled(), { timeout: 300 });
+
+    // Click anyway (fireEvent bypasses the disabled attribute a real click
+    // would respect) - proves handleSend is never reached even if a click
+    // somehow slips through, not just that the button looks disabled.
+    fireEvent.click(confirm);
+
+    expect(sendCalls(qdnRequestMock)).toHaveLength(0);
+
+    // Let the pending "Bob" resolution land so no timers/state updates leak
+    // into later tests.
+    await screen.findByText(/sending to Bob's BTC address/i);
+    expect(sendCalls(qdnRequestMock)).toHaveLength(0);
   });
 });
