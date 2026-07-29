@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ThemeProviderWrapper from '../../../styles/theme/theme-provider';
@@ -49,6 +50,13 @@ vi.mock('../../../utils/contactCardQDN', () => ({
     debouncedPublishContactCard(...args),
 }));
 
+function LocationProbe() {
+  const location = useLocation();
+  return (
+    <div data-testid="location">{location.pathname + location.search}</div>
+  );
+}
+
 describe('MyContactCardPage', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('en');
@@ -63,9 +71,12 @@ describe('MyContactCardPage', () => {
 
   function renderPage() {
     return render(
-      <ThemeProviderWrapper>
-        <MyContactCardPage />
-      </ThemeProviderWrapper>
+      <MemoryRouter>
+        <ThemeProviderWrapper>
+          <MyContactCardPage />
+          <LocationProbe />
+        </ThemeProviderWrapper>
+      </MemoryRouter>
     );
   }
 
@@ -93,5 +104,14 @@ describe('MyContactCardPage', () => {
       'Alice'
     );
     expect(screen.getByText(/1 coin/i)).toBeInTheDocument();
+  });
+
+  it('navigates to the find-a-person page when the button is clicked', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole('button', { name: /find a person/i }));
+
+    expect(screen.getByTestId('location')).toHaveTextContent('/contacts/find');
   });
 });
