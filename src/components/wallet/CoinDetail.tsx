@@ -1364,7 +1364,10 @@ export function CoinDetail({ chain }: Props) {
                     variant={
                       recipientMode === 'address' ? 'contained' : 'outlined'
                     }
-                    onClick={() => setRecipientMode('address')}
+                    onClick={() => {
+                      setRecipientMode('address');
+                      setStaleAddressWarning(false);
+                    }}
                     disabled={sending}
                   >
                     {t('send_dialog.recipient_mode_address')}
@@ -1374,7 +1377,10 @@ export function CoinDetail({ chain }: Props) {
                     variant={
                       recipientMode === 'name' ? 'contained' : 'outlined'
                     }
-                    onClick={() => setRecipientMode('name')}
+                    onClick={() => {
+                      setRecipientMode('name');
+                      setStaleAddressWarning(false);
+                    }}
                     disabled={sending}
                   >
                     {t('send_dialog.recipient_mode_name')}
