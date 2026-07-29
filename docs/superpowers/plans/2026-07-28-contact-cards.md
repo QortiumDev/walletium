@@ -17,6 +17,7 @@ Full design: `docs/superpowers/specs/2026-07-28-contact-cards-design.md`
 ## File Structure
 
 **Create:**
+
 - `src/utils/contactCardStorage.ts` - local per-coin decision state (published/private/undecided + optional override address), localStorage-backed
 - `src/utils/__tests__/contactCardStorage.test.ts`
 - `src/utils/contactCardQDN.ts` - fetch/publish (delete-then-republish)/debounce against the public QDN resource
@@ -35,6 +36,7 @@ Full design: `docs/superpowers/specs/2026-07-28-contact-cards-design.md`
 - `src/components/ContactCard/__tests__/FindPersonPage.test.tsx`
 
 **Modify:**
+
 - `src/utils/Types.tsx` - remove `AddressBookEntry`, add `ContactCardQDNData`, `ContactCardCoinState`, `ContactCardLocalState`
 - `src/components/wallet/CoinDetail.tsx` - Name/Address recipient tabs, resolver wiring, pre-send re-resolution
 - `src/components/wallet/__tests__/CoinDetail.send.test.tsx` - new tests for the above
@@ -45,6 +47,7 @@ Full design: `docs/superpowers/specs/2026-07-28-contact-cards-design.md`
 - `src/i18n/locales/en/core.json` - remove `address_book_*`, add `contact_card_*` and new `send_dialog.*` keys
 
 **Delete:**
+
 - `src/components/AddressBook/` (entire folder, including its `__tests__`)
 - `src/utils/addressBookStorage.ts`, `src/utils/__tests__/addressBookStorage.test.ts`
 - `src/utils/addressBookQDN.ts`, `src/utils/__tests__/addressBookQDN.test.ts`
@@ -56,6 +59,7 @@ Note on i18n scope: `fallbackLng: 'en'` is configured in `src/i18n/i18n.ts`, so 
 ### Task 1: Types
 
 **Files:**
+
 - Modify: `src/utils/Types.tsx`
 
 - [ ] **Step 1: Replace `AddressBookEntry` with the contact-card types**
@@ -98,6 +102,7 @@ git commit -m "Replace AddressBookEntry types with contact card types"
 ### Task 2: `contactCardStorage.ts` - local decision state
 
 **Files:**
+
 - Create: `src/utils/contactCardStorage.ts`
 - Test: `src/utils/__tests__/contactCardStorage.test.ts`
 
@@ -204,7 +209,9 @@ export function setCoinDecision(
   decision: ContactCardDecision
 ): ContactCardLocalState {
   const state = getContactCardLocalState();
-  const current = state[coin] ?? { decision: 'undecided' as ContactCardDecision };
+  const current = state[coin] ?? {
+    decision: 'undecided' as ContactCardDecision,
+  };
   return save({ ...state, [coin]: { ...current, decision } });
 }
 
@@ -213,7 +220,9 @@ export function setCoinOverrideAddress(
   overrideAddress: string | undefined
 ): ContactCardLocalState {
   const state = getContactCardLocalState();
-  const current = state[coin] ?? { decision: 'undecided' as ContactCardDecision };
+  const current = state[coin] ?? {
+    decision: 'undecided' as ContactCardDecision,
+  };
   const nextEntry: ContactCardCoinState = overrideAddress
     ? { decision: current.decision, overrideAddress }
     : { decision: current.decision };
@@ -238,6 +247,7 @@ git commit -m "Add local contact card decision state (published/private/undecide
 ### Task 3: `contactCardQDN.ts` - `fetchContactCard`
 
 **Files:**
+
 - Create: `src/utils/contactCardQDN.ts`
 - Test: `src/utils/__tests__/contactCardQDN.test.ts`
 
@@ -289,7 +299,9 @@ describe('fetchContactCard', () => {
     });
     (global as any).qdnRequest = mockQdnRequest;
 
-    expect(await fetchContactCard('NoCardHere')).toEqual({ status: 'not-found' });
+    expect(await fetchContactCard('NoCardHere')).toEqual({
+      status: 'not-found',
+    });
   });
 
   it('returns "not-found" when the bridge resolves with no data', async () => {
@@ -395,6 +407,7 @@ git commit -m "Add fetchContactCard read path"
 ### Task 4: `contactCardQDN.ts` - delete-then-republish + debounce
 
 **Files:**
+
 - Modify: `src/utils/contactCardQDN.ts`
 - Test: `src/utils/__tests__/contactCardQDN.test.ts`
 
@@ -466,7 +479,9 @@ describe('publishContactCard', () => {
 
   it('deletes the old resource before publishing the new one, in that order', async () => {
     await publishContactCard(LOCAL_STATE, 'Alice');
-    const deleteIndex = calls.findIndex((c) => c.action === 'DELETE_QDN_RESOURCE');
+    const deleteIndex = calls.findIndex(
+      (c) => c.action === 'DELETE_QDN_RESOURCE'
+    );
     const publishIndex = calls.findIndex(
       (c) => c.action === 'PUBLISH_QDN_RESOURCE'
     );
@@ -479,7 +494,8 @@ describe('publishContactCard', () => {
       calls.push(req);
       if (req.action === 'DELETE_QDN_RESOURCE') throw { error: 1401 };
       if (req.action === 'UNLOCK_SELECTED_ACCOUNT') return { isUnlocked: true };
-      if (req.action === 'GET_USER_WALLET') return { address: 'bc1qmywalletaddress' };
+      if (req.action === 'GET_USER_WALLET')
+        return { address: 'bc1qmywalletaddress' };
       return { success: true };
     });
     (global as any).qdnRequest = mockQdnRequest;
@@ -492,7 +508,8 @@ describe('publishContactCard', () => {
   it('returns null and does not publish when the account cannot be unlocked', async () => {
     mockQdnRequest = vi.fn(async (req: Record<string, unknown>) => {
       calls.push(req);
-      if (req.action === 'UNLOCK_SELECTED_ACCOUNT') return { isUnlocked: false };
+      if (req.action === 'UNLOCK_SELECTED_ACCOUNT')
+        return { isUnlocked: false };
       return { success: true };
     });
     (global as any).qdnRequest = mockQdnRequest;
@@ -581,7 +598,10 @@ export async function publishContactCard(
 
     const resolved = await Promise.all(
       publishedCoins.map(async ([coin, state]) => {
-        const address = await resolveAddressForCoin(coin, state.overrideAddress);
+        const address = await resolveAddressForCoin(
+          coin,
+          state.overrideAddress
+        );
         return address ? ([coin, address] as const) : null;
       })
     );
@@ -636,7 +656,7 @@ export function debouncedPublishContactCard(
 }
 ```
 
-Note: the test asserts `base64` equals the plain object (`toMatchObject`), matching the real bridge's `data64`/`base64` field, which accepts an inline-serializable payload the same way `PUBLISH_QDN_RESOURCE` is called elsewhere in this codebase's tests. If a later integration finds the bridge strictly requires an actual base64 *string* rather than an object, wrap `data` with `objectToBase64(data)` from `qapp-core` (same helper `addressBookQDN.ts` used) and update this call site plus the test's expected shape accordingly - that's an integration detail to confirm against the live bridge, not a design change.
+Note: the test asserts `base64` equals the plain object (`toMatchObject`), matching the real bridge's `data64`/`base64` field, which accepts an inline-serializable payload the same way `PUBLISH_QDN_RESOURCE` is called elsewhere in this codebase's tests. If a later integration finds the bridge strictly requires an actual base64 _string_ rather than an object, wrap `data` with `objectToBase64(data)` from `qapp-core` (same helper `addressBookQDN.ts` used) and update this call site plus the test's expected shape accordingly - that's an integration detail to confirm against the live bridge, not a design change.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -655,6 +675,7 @@ git commit -m "Add delete-then-republish and debounced publish for contact cards
 ### Task 5: `resolveContact.ts`
 
 **Files:**
+
 - Create: `src/utils/resolveContact.ts`
 - Test: `src/utils/__tests__/resolveContact.test.ts`
 
@@ -712,7 +733,9 @@ describe('resolveContact', () => {
   });
 
   it('returns "no-card" when the name exists but has no contact card', async () => {
-    (global as any).qdnRequest = vi.fn(async () => ({ owner: 'Q-owner-address' }));
+    (global as any).qdnRequest = vi.fn(async () => ({
+      owner: 'Q-owner-address',
+    }));
     vi.mocked(contactCardQDN.fetchContactCard).mockResolvedValue({
       status: 'not-found',
     });
@@ -722,18 +745,26 @@ describe('resolveContact', () => {
   });
 
   it('returns "coin-not-published" when the card exists but lacks that coin', async () => {
-    (global as any).qdnRequest = vi.fn(async () => ({ owner: 'Q-owner-address' }));
+    (global as any).qdnRequest = vi.fn(async () => ({
+      owner: 'Q-owner-address',
+    }));
     vi.mocked(contactCardQDN.fetchContactCard).mockResolvedValue({
       status: 'found',
       data: { version: 1, lastUpdated: 1, addresses: { LTC: 'ltc-address' } },
     });
 
     const result = await resolveContact('Alice', 'BTC');
-    expect(result).toEqual({ status: 'coin-not-published', name: 'Alice', coin: 'BTC' });
+    expect(result).toEqual({
+      status: 'coin-not-published',
+      name: 'Alice',
+      coin: 'BTC',
+    });
   });
 
   it('returns "resolved" with the address when the coin is published', async () => {
-    (global as any).qdnRequest = vi.fn(async () => ({ owner: 'Q-owner-address' }));
+    (global as any).qdnRequest = vi.fn(async () => ({
+      owner: 'Q-owner-address',
+    }));
     vi.mocked(contactCardQDN.fetchContactCard).mockResolvedValue({
       status: 'found',
       data: { version: 1, lastUpdated: 1, addresses: { BTC: 'bc1qalice' } },
@@ -749,7 +780,9 @@ describe('resolveContact', () => {
   });
 
   it('returns "fetch-failed" when the card fetch fails, even if the name exists', async () => {
-    (global as any).qdnRequest = vi.fn(async () => ({ owner: 'Q-owner-address' }));
+    (global as any).qdnRequest = vi.fn(async () => ({
+      owner: 'Q-owner-address',
+    }));
     vi.mocked(contactCardQDN.fetchContactCard).mockResolvedValue({
       status: 'fetch-failed',
       error: new Error('node unreachable'),
@@ -777,7 +810,9 @@ describe('resolveContact', () => {
 describe('missingCoinsForCard', () => {
   it('returns chains with no saved decision', () => {
     const state: ContactCardLocalState = { BTC: { decision: 'published' } };
-    expect(missingCoinsForCard(state, [CHAIN_BTC, CHAIN_LTC])).toEqual([CHAIN_LTC]);
+    expect(missingCoinsForCard(state, [CHAIN_BTC, CHAIN_LTC])).toEqual([
+      CHAIN_LTC,
+    ]);
   });
 
   it('does not flag a coin explicitly marked private', () => {
@@ -824,7 +859,9 @@ export async function resolveContact(
   const trimmedName = name.trim();
 
   const [nameData, cardResult] = await Promise.all([
-    qdnRequest({ action: 'GET_NAME_DATA', name: trimmedName }).catch(() => null),
+    qdnRequest({ action: 'GET_NAME_DATA', name: trimmedName }).catch(
+      () => null
+    ),
     fetchContactCard(trimmedName),
   ]);
 
@@ -873,6 +910,7 @@ git commit -m "Add shared resolveContact resolver and missingCoinsForCard"
 ### Task 6: `contactMru.ts` - recently searched names
 
 **Files:**
+
 - Create: `src/utils/contactMru.ts`
 - Test: `src/utils/__tests__/contactMru.test.ts`
 
@@ -967,6 +1005,7 @@ git commit -m "Add recently-searched-contact-name list"
 ### Task 7: i18n keys for the new UI
 
 **Files:**
+
 - Modify: `src/i18n/locales/en/core.json`
 
 Adding these up front means every later component task can just call `t('core:...')` without a separate i18n step.
@@ -1026,6 +1065,7 @@ git commit -m "Add i18n keys for contact card and recipient-by-name UI"
 ### Task 8: `ContactCardCoinRow`
 
 **Files:**
+
 - Create: `src/components/ContactCard/ContactCardCoinRow.tsx`
 - Test: `src/components/ContactCard/__tests__/ContactCardCoinRow.test.tsx`
 
@@ -1129,7 +1169,10 @@ describe('ContactCardCoinRow', () => {
     await user.type(overrideField, 'bc1qcoldstorage');
 
     await waitFor(() =>
-      expect(onOverrideChange).toHaveBeenLastCalledWith('BTC', 'bc1qcoldstorage')
+      expect(onOverrideChange).toHaveBeenLastCalledWith(
+        'BTC',
+        'bc1qcoldstorage'
+      )
     );
   });
 
@@ -1150,7 +1193,14 @@ Expected: FAIL - `Cannot find module '../ContactCardCoinRow'`
 ```tsx
 // src/components/ContactCard/ContactCardCoinRow.tsx
 import { useEffect, useState } from 'react';
-import { Box, Button, FormControlLabel, Switch, TextField, Typography } from '@mui/material';
+import {
+  Box,
+  Button,
+  FormControlLabel,
+  Switch,
+  TextField,
+  Typography,
+} from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import type { ChainConfig } from '../../config/chains';
 import type { ContactCardCoinState } from '../../utils/Types';
@@ -1200,9 +1250,7 @@ export function ContactCardCoinRow({
   const displayedAddress = state.overrideAddress || walletAddress;
 
   return (
-    <Box
-      sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, py: 1.5 }}
-    >
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, py: 1.5 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
         <Typography sx={{ minWidth: 64, fontWeight: 700 }}>
           {chain.ticker}
@@ -1274,6 +1322,7 @@ git commit -m "Add ContactCardCoinRow"
 ### Task 9: `ContactCardCompletenessBanner`
 
 **Files:**
+
 - Create: `src/components/ContactCard/ContactCardCompletenessBanner.tsx`
 - Test: `src/components/ContactCard/__tests__/ContactCardCompletenessBanner.test.tsx`
 
@@ -1385,6 +1434,7 @@ git commit -m "Add ContactCardCompletenessBanner"
 ### Task 10: `MyContactCardPage`
 
 **Files:**
+
 - Create: `src/components/ContactCard/MyContactCardPage.tsx`
 - Test: `src/components/ContactCard/__tests__/MyContactCardPage.test.tsx`
 
@@ -1582,6 +1632,7 @@ git commit -m "Add MyContactCardPage"
 ### Task 11: `FindPersonPage`
 
 **Files:**
+
 - Create: `src/components/ContactCard/FindPersonPage.tsx`
 - Test: `src/components/ContactCard/__tests__/FindPersonPage.test.tsx`
 
@@ -1738,7 +1789,10 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useSupportedChains } from '../../hooks/useSupportedChains';
 import { fetchContactCard } from '../../utils/contactCardQDN';
-import { addRecentContactName, getRecentContactNames } from '../../utils/contactMru';
+import {
+  addRecentContactName,
+  getRecentContactNames,
+} from '../../utils/contactMru';
 import { EMPTY_STRING } from '../../common/constants';
 import type { ChainConfig } from '../../config/chains';
 
@@ -1892,6 +1946,7 @@ git commit -m "Add FindPersonPage"
 ### Task 12: Wire `/contacts` and `/contacts/find` into routing and the top bar
 
 **Files:**
+
 - Modify: `src/routes/Routes.tsx`
 - Modify: `src/components/layout/TopBar.tsx`
 
@@ -1921,22 +1976,24 @@ import ContactsIcon from '@mui/icons-material/Contacts';
 and, right after the existing "All transactions" `Tooltip`/`IconButton` block (the one navigating to `/history`), add:
 
 ```tsx
-        {/* Contact cards */}
-        <Tooltip title="Contact cards" placement="bottom">
-          <IconButton
-            size="small"
-            onClick={() =>
-              navigate(pathname.startsWith('/contacts') ? '/' : '/contacts')
-            }
-            sx={{
-              ...buttonSx,
-              color: pathname.startsWith('/contacts') ? c.accent : c.textSecondary,
-            }}
-            aria-label="contact cards"
-          >
-            <ContactsIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
+{
+  /* Contact cards */
+}
+<Tooltip title="Contact cards" placement="bottom">
+  <IconButton
+    size="small"
+    onClick={() =>
+      navigate(pathname.startsWith('/contacts') ? '/' : '/contacts')
+    }
+    sx={{
+      ...buttonSx,
+      color: pathname.startsWith('/contacts') ? c.accent : c.textSecondary,
+    }}
+    aria-label="contact cards"
+  >
+    <ContactsIcon fontSize="small" />
+  </IconButton>
+</Tooltip>;
 ```
 
 - [ ] **Step 3: Manually verify routing**
@@ -1955,6 +2012,7 @@ git commit -m "Wire contact card pages into routing and the top bar"
 ### Task 13: `CoinDetail.tsx` - Name/Address recipient tabs + resolver
 
 **Files:**
+
 - Modify: `src/components/wallet/CoinDetail.tsx`
 - Test: `src/components/wallet/__tests__/CoinDetail.send.test.tsx`
 
@@ -2006,7 +2064,9 @@ describe('CoinDetail recipient-by-name flow', () => {
     await openSendDialog(user);
 
     expect(screen.getByLabelText(/recipient address/i)).toBeInTheDocument();
-    expect(screen.queryByLabelText(/recipient's qortium name/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/recipient's qortium name/i)
+    ).not.toBeInTheDocument();
   });
 
   it('switching to Name mode resolves and displays the address, and Confirm Send uses it', async () => {
@@ -2021,10 +2081,15 @@ describe('CoinDetail recipient-by-name flow', () => {
     renderDetail();
     await openSendDialog(user);
     await user.click(screen.getByRole('button', { name: /^name$/i }));
-    await user.type(screen.getByLabelText(/recipient's qortium name/i), 'Alice');
+    await user.type(
+      screen.getByLabelText(/recipient's qortium name/i),
+      'Alice'
+    );
 
     expect(
-      await screen.findByText(/sending to Alice's BTC address: btc-resolved-address/i)
+      await screen.findByText(
+        /sending to Alice's BTC address: btc-resolved-address/i
+      )
     ).toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/amount \(BTC\)/i), '1.25');
@@ -2047,13 +2112,20 @@ describe('CoinDetail recipient-by-name flow', () => {
     renderDetail();
     await openSendDialog(user);
     await user.click(screen.getByRole('button', { name: /^name$/i }));
-    await user.type(screen.getByLabelText(/recipient's qortium name/i), 'Alice');
+    await user.type(
+      screen.getByLabelText(/recipient's qortium name/i),
+      'Alice'
+    );
     await user.type(screen.getByLabelText(/amount \(BTC\)/i), '1.25');
 
     expect(
-      await screen.findByText(/alice hasn't published an address for this coin/i)
+      await screen.findByText(
+        /alice hasn't published an address for this coin/i
+      )
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /confirm send/i })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: /confirm send/i })
+    ).toBeDisabled();
   });
 
   it('re-resolves right before sending and blocks if the address changed since the field was filled', async () => {
@@ -2075,7 +2147,10 @@ describe('CoinDetail recipient-by-name flow', () => {
     renderDetail();
     await openSendDialog(user);
     await user.click(screen.getByRole('button', { name: /^name$/i }));
-    await user.type(screen.getByLabelText(/recipient's qortium name/i), 'Alice');
+    await user.type(
+      screen.getByLabelText(/recipient's qortium name/i),
+      'Alice'
+    );
     await screen.findByText(/btc-old-address/i);
     await user.type(screen.getByLabelText(/amount \(BTC\)/i), '1.25');
 
@@ -2099,7 +2174,10 @@ Expected: FAIL - no "Name"/"Address" mode buttons exist yet, `recipient's qortiu
 Add the import near the top (with the other util imports around line 50-54):
 
 ```tsx
-import { resolveContact, type ContactResolution } from '../../utils/resolveContact';
+import {
+  resolveContact,
+  type ContactResolution,
+} from '../../utils/resolveContact';
 ```
 
 Add a debounce constant near the other top-of-file constants (with `ARRR_OUTER_MAX` etc., around line 73-75):
@@ -2111,183 +2189,185 @@ const RECIPIENT_NAME_LOOKUP_DEBOUNCE_MS = 800;
 Add new state alongside the existing `recipient` state (around line 118-120):
 
 ```tsx
-  const [recipientMode, setRecipientMode] = useState<'address' | 'name'>('address');
-  const [recipientName, setRecipientName] = useState(EMPTY_STRING);
-  const [resolution, setResolution] = useState<ContactResolution | null>(null);
-  const [resolvingRecipient, setResolvingRecipient] = useState(false);
+const [recipientMode, setRecipientMode] = useState<'address' | 'name'>(
+  'address'
+);
+const [recipientName, setRecipientName] = useState(EMPTY_STRING);
+const [resolution, setResolution] = useState<ContactResolution | null>(null);
+const [resolvingRecipient, setResolvingRecipient] = useState(false);
 ```
 
 Reset the new state alongside the existing resets in `openSend` (around line 411-419) and `closeSend` (around line 493-503) - add these four lines to each function's existing reset block:
 
 ```tsx
-    setRecipientMode('address');
-    setRecipientName(EMPTY_STRING);
-    setResolution(null);
-    setResolvingRecipient(false);
+setRecipientMode('address');
+setRecipientName(EMPTY_STRING);
+setResolution(null);
+setResolvingRecipient(false);
 ```
 
 Add a debounced-resolution effect (place it near `openSend`, after its `useCallback` block):
 
 ```tsx
-  useEffect(() => {
-    if (recipientMode !== 'name') return;
-    const trimmed = recipientName.trim();
-    if (!trimmed) {
-      setResolution(null);
-      setRecipient(EMPTY_STRING);
-      return;
-    }
-    let cancelled = false;
-    setResolvingRecipient(true);
-    const timeout = setTimeout(async () => {
-      const result = await resolveContact(trimmed, chain.coinEnum);
-      if (cancelled) return;
-      setResolution(result);
-      setRecipient(result.status === 'resolved' ? result.address : EMPTY_STRING);
-      setResolvingRecipient(false);
-    }, RECIPIENT_NAME_LOOKUP_DEBOUNCE_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timeout);
-    };
-  }, [recipientName, recipientMode, chain.coinEnum]);
+useEffect(() => {
+  if (recipientMode !== 'name') return;
+  const trimmed = recipientName.trim();
+  if (!trimmed) {
+    setResolution(null);
+    setRecipient(EMPTY_STRING);
+    return;
+  }
+  let cancelled = false;
+  setResolvingRecipient(true);
+  const timeout = setTimeout(async () => {
+    const result = await resolveContact(trimmed, chain.coinEnum);
+    if (cancelled) return;
+    setResolution(result);
+    setRecipient(result.status === 'resolved' ? result.address : EMPTY_STRING);
+    setResolvingRecipient(false);
+  }, RECIPIENT_NAME_LOOKUP_DEBOUNCE_MS);
+  return () => {
+    cancelled = true;
+    clearTimeout(timeout);
+  };
+}, [recipientName, recipientMode, chain.coinEnum]);
 ```
 
 Modify `handleSend` (around line 446-491) to re-resolve immediately before sending when in Name mode, and to use the freshly-resolved address rather than trusting the possibly-stale `recipient` state:
 
 ```tsx
-  const handleSend = async () => {
-    if (!canConfirmSend) return;
+const handleSend = async () => {
+  if (!canConfirmSend) return;
 
-    setSending(true);
-    try {
-      if (!(await ensureAccountUnlocked())) return;
+  setSending(true);
+  try {
+    if (!(await ensureAccountUnlocked())) return;
 
-      let effectiveRecipient = recipient;
-      if (recipientMode === 'name') {
-        const fresh = await resolveContact(recipientName.trim(), chain.coinEnum);
-        setResolution(fresh);
-        if (fresh.status !== 'resolved') return;
-        if (fresh.address !== recipient) {
-          setRecipient(fresh.address);
-          return; // address changed since the field was filled - force re-confirmation
-        }
-        effectiveRecipient = fresh.address;
+    let effectiveRecipient = recipient;
+    if (recipientMode === 'name') {
+      const fresh = await resolveContact(recipientName.trim(), chain.coinEnum);
+      setResolution(fresh);
+      if (fresh.status !== 'resolved') return;
+      if (fresh.address !== recipient) {
+        setRecipient(fresh.address);
+        return; // address changed since the field was filled - force re-confirmation
       }
-
-      let result: SendCoinResult | null = null;
-      if (chain.isNative) {
-        const res = await qdnRequest({
-          action: 'SEND_QORT',
-          recipient: effectiveRecipient,
-          amount: parseFloat(amount),
-        } as any);
-        if (res?.accepted === false)
-          throw new Error(res.error ?? 'SEND_QORT failed');
-        result = res as any;
-      } else {
-        const payload: Record<string, unknown> = {
-          action: 'SEND_COIN',
-          recipient: effectiveRecipient,
-          coin: chain.coinEnum,
-        };
-        if (canUseForeignSendMax && sendMax) {
-          payload.sendMax = true;
-        } else {
-          payload.amount = amount;
-        }
-        if (chain.coinEnum !== 'ARRR' && foreignFeePerByte !== '') {
-          payload.feePerByte = foreignFeePerByte.trim();
-        }
-        result = (await qdnRequest(payload as any)) as SendCoinResult | null;
-      }
-      setSendResponse(result);
-      setSendResult('success');
-
-      window.setTimeout(() => {
-        fetchBalance();
-        fetchTransactions();
-      }, TIME_SECONDS_3);
-    } catch {
-      setSendResponse(null);
-      setSendResult('error');
-    } finally {
-      setSending(false);
+      effectiveRecipient = fresh.address;
     }
-  };
+
+    let result: SendCoinResult | null = null;
+    if (chain.isNative) {
+      const res = await qdnRequest({
+        action: 'SEND_QORT',
+        recipient: effectiveRecipient,
+        amount: parseFloat(amount),
+      } as any);
+      if (res?.accepted === false)
+        throw new Error(res.error ?? 'SEND_QORT failed');
+      result = res as any;
+    } else {
+      const payload: Record<string, unknown> = {
+        action: 'SEND_COIN',
+        recipient: effectiveRecipient,
+        coin: chain.coinEnum,
+      };
+      if (canUseForeignSendMax && sendMax) {
+        payload.sendMax = true;
+      } else {
+        payload.amount = amount;
+      }
+      if (chain.coinEnum !== 'ARRR' && foreignFeePerByte !== '') {
+        payload.feePerByte = foreignFeePerByte.trim();
+      }
+      result = (await qdnRequest(payload as any)) as SendCoinResult | null;
+    }
+    setSendResponse(result);
+    setSendResult('success');
+
+    window.setTimeout(() => {
+      fetchBalance();
+      fetchTransactions();
+    }, TIME_SECONDS_3);
+  } catch {
+    setSendResponse(null);
+    setSendResult('error');
+  } finally {
+    setSending(false);
+  }
+};
 ```
 
 Replace the single recipient `TextField` (lines 1291-1303) with the mode toggle and both fields:
 
 ```tsx
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  <Button
-                    size="small"
-                    variant={recipientMode === 'address' ? 'contained' : 'outlined'}
-                    onClick={() => setRecipientMode('address')}
-                    disabled={sending}
-                  >
-                    {t('send_dialog.recipient_mode_address')}
-                  </Button>
-                  <Button
-                    size="small"
-                    variant={recipientMode === 'name' ? 'contained' : 'outlined'}
-                    onClick={() => setRecipientMode('name')}
-                    disabled={sending}
-                  >
-                    {t('send_dialog.recipient_mode_name')}
-                  </Button>
-                </Box>
+<Box sx={{ display: 'flex', gap: 1 }}>
+  <Button
+    size="small"
+    variant={recipientMode === 'address' ? 'contained' : 'outlined'}
+    onClick={() => setRecipientMode('address')}
+    disabled={sending}
+  >
+    {t('send_dialog.recipient_mode_address')}
+  </Button>
+  <Button
+    size="small"
+    variant={recipientMode === 'name' ? 'contained' : 'outlined'}
+    onClick={() => setRecipientMode('name')}
+    disabled={sending}
+  >
+    {t('send_dialog.recipient_mode_name')}
+  </Button>
+</Box>;
 
-                {recipientMode === 'address' ? (
-                  <TextField
-                    label={t('send_dialog.recipient_address')}
-                    value={recipient}
-                    onChange={(e) => setRecipient(e.target.value.trim())}
-                    fullWidth
-                    disabled={sending}
-                    error={showRecipientError}
-                    helperText={
-                      showRecipientError
-                        ? t('send_dialog.recipient_invalid')
-                        : undefined
-                    }
-                  />
-                ) : (
-                  <>
-                    <TextField
-                      label={t('send_dialog.recipient_name')}
-                      value={recipientName}
-                      onChange={(e) => setRecipientName(e.target.value)}
-                      fullWidth
-                      disabled={sending}
-                    />
-                    {resolvingRecipient && (
-                      <Typography variant="caption">
-                        {t('send_dialog.resolving_recipient')}
-                      </Typography>
-                    )}
-                    {!resolvingRecipient && resolution?.status === 'resolved' && (
-                      <Typography variant="caption" sx={{ color: c.success }}>
-                        {t('send_dialog.resolved_to', {
-                          name: resolution.name,
-                          ticker: chain.ticker,
-                          address: resolution.address,
-                        })}
-                      </Typography>
-                    )}
-                    {!resolvingRecipient &&
-                      resolution &&
-                      resolution.status !== 'resolved' && (
-                        <Typography variant="caption" sx={{ color: c.danger }}>
-                          {t(
-                            `send_dialog.resolution_${resolution.status.replace(/-/g, '_')}`,
-                            { name: resolution.name }
-                          )}
-                        </Typography>
-                      )}
-                  </>
-                )}
+{
+  recipientMode === 'address' ? (
+    <TextField
+      label={t('send_dialog.recipient_address')}
+      value={recipient}
+      onChange={(e) => setRecipient(e.target.value.trim())}
+      fullWidth
+      disabled={sending}
+      error={showRecipientError}
+      helperText={
+        showRecipientError ? t('send_dialog.recipient_invalid') : undefined
+      }
+    />
+  ) : (
+    <>
+      <TextField
+        label={t('send_dialog.recipient_name')}
+        value={recipientName}
+        onChange={(e) => setRecipientName(e.target.value)}
+        fullWidth
+        disabled={sending}
+      />
+      {resolvingRecipient && (
+        <Typography variant="caption">
+          {t('send_dialog.resolving_recipient')}
+        </Typography>
+      )}
+      {!resolvingRecipient && resolution?.status === 'resolved' && (
+        <Typography variant="caption" sx={{ color: c.success }}>
+          {t('send_dialog.resolved_to', {
+            name: resolution.name,
+            ticker: chain.ticker,
+            address: resolution.address,
+          })}
+        </Typography>
+      )}
+      {!resolvingRecipient &&
+        resolution &&
+        resolution.status !== 'resolved' && (
+          <Typography variant="caption" sx={{ color: c.danger }}>
+            {t(
+              `send_dialog.resolution_${resolution.status.replace(/-/g, '_')}`,
+              { name: resolution.name }
+            )}
+          </Typography>
+        )}
+    </>
+  );
+}
 ```
 
 `Typography` must already be imported at the top of `CoinDetail.tsx` (it is, per the existing `import { ... Typography } from '@mui/material';` block) - if not, add it to that import list.
@@ -2309,6 +2389,7 @@ git commit -m "Add Name/Address recipient modes to the send flow, with pre-send 
 ### Task 14: Remove the old Address Book
 
 **Files:**
+
 - Delete: `src/components/AddressBook/` (entire folder)
 - Delete: `src/utils/addressBookStorage.ts`, `src/utils/__tests__/addressBookStorage.test.ts`
 - Delete: `src/utils/addressBookQDN.ts`, `src/utils/__tests__/addressBookQDN.test.ts`
@@ -2338,11 +2419,11 @@ import { syncAllAddressBooksOnStartup } from './utils/addressBookQDN';
 and remove the effect that calls it (lines 80-84):
 
 ```tsx
-  useEffect(() => {
-    if (address && name) {
-      syncAllAddressBooksOnStartup(name).catch(() => {});
-    }
-  }, [address, name]);
+useEffect(() => {
+  if (address && name) {
+    syncAllAddressBooksOnStartup(name).catch(() => {});
+  }
+}, [address, name]);
 ```
 
 - [ ] **Step 3: Remove the address-book constants**
@@ -2421,6 +2502,7 @@ Expected: no errors (warnings acceptable only if they pre-date this change - do 
 - [ ] **Step 4: Manual smoke test**
 
 Run: `npm run dev`, then:
+
 1. Open the new "Contacts" icon in the top bar -> confirm "My Contact Card" lists every supported coin with a Publish/Private switch and the completeness banner shows a nonzero count on a fresh profile.
 2. Toggle one coin to Published, confirm the banner count drops by one.
 3. Navigate to `/contacts/find`, search for a name that has no card, confirm the "doesn't have a contact card yet" message appears.

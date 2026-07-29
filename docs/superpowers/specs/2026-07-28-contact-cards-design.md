@@ -9,12 +9,12 @@
 
 Replace the private, per-user Address Book (`src/components/AddressBook/*`, `src/utils/addressBookStorage.ts`, `src/utils/addressBookQDN.ts`) with **contact cards**: each person publishes their own receive addresses, per coin, under their own registered Qortium name. Sending to someone becomes "type their name, pick a coin" instead of "hope you already saved their address correctly."
 
-Note on current state: `AddressBookDialog` and friends exist but are never actually opened anywhere in the app today (`AddressBookDialog` is imported only by its own test file - `AppLayout.tsx` only calls the QDN *sync* function, not the dialog). There is no existing send-flow integration to migrate; the `recipient` field in `CoinDetail.tsx`'s send dialog is a plain address `TextField` today. So this is greenfield UI work for the send flow, and a clean deletion for the old Address Book files.
+Note on current state: `AddressBookDialog` and friends exist but are never actually opened anywhere in the app today (`AddressBookDialog` is imported only by its own test file - `AppLayout.tsx` only calls the QDN _sync_ function, not the dialog). There is no existing send-flow integration to migrate; the `recipient` field in `CoinDetail.tsx`'s send dialog is a plain address `TextField` today. So this is greenfield UI work for the send flow, and a clean deletion for the old Address Book files.
 
 Core shift from today's model:
 
-- **Today:** `DOCUMENT_PRIVATE` QDN resource per coin per user (`walletium-addressbook-{coin}`), holding *other people's* addresses that the user typed in by hand. Private to the owner; never shared.
-- **New:** one `DOCUMENT` (public) QDN resource per user (`walletium-contactcard`), holding a map of *that user's own* coin -> address, built automatically from the wallet's own managed addresses. Anyone can resolve it by name.
+- **Today:** `DOCUMENT_PRIVATE` QDN resource per coin per user (`walletium-addressbook-{coin}`), holding _other people's_ addresses that the user typed in by hand. Private to the owner; never shared.
+- **New:** one `DOCUMENT` (public) QDN resource per user (`walletium-contactcard`), holding a map of _that user's own_ coin -> address, built automatically from the wallet's own managed addresses. Anyone can resolve it by name.
 
 No manual "saved addresses for other people" list survives this change (confirmed: fully replace, no personal address book fallback). Raw address paste remains a fully supported, always-available, unsaved input mode.
 
@@ -55,7 +55,10 @@ interface ContactCardCoinState {
   decision: 'published' | 'private' | 'undecided'; // undecided = never touched by the user
   overrideAddress?: string; // manual address, only used if the user opts out of "use my wallet address"
 }
-type ContactCardLocalState = Record<string /* coin key */, ContactCardCoinState>;
+type ContactCardLocalState = Record<
+  string /* coin key */,
+  ContactCardCoinState
+>;
 ```
 
 Stored in `localStorage` under `walletium-contactcard-local`. New coins that appear in `useSupportedChains()` but have no entry yet are implicitly `undecided` (no write needed until the user acts on them) - this is what drives the completeness banner.
@@ -69,7 +72,9 @@ The address actually used for a `published` coin is **never read from `overrideA
 Mirrors the structure of today's `addressBookQDN.ts` (same debounce pattern, same `ensureAccountUnlocked` helper, same 404-tolerant fetch) with three differences: single resource instead of one-per-coin, `DOCUMENT` instead of `DOCUMENT_PRIVATE` (no `ENCRYPT_DATA`/`DECRYPT_DATA` step needed - it's meant to be public), and **delete-then-republish** on every change instead of a plain overwrite.
 
 ```ts
-export async function fetchContactCard(name: string): Promise<
+export async function fetchContactCard(
+  name: string
+): Promise<
   | { status: 'found'; data: ContactCardQDNData }
   | { status: 'not-found' }
   | { status: 'fetch-failed'; error: unknown }
