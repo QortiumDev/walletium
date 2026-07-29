@@ -52,6 +52,10 @@ import {
   isPositiveDecimal,
   isValidRecipient,
 } from '../../utils/walletSend';
+import {
+  resolveContact,
+  type ContactResolution,
+} from '../../utils/resolveContact';
 import { requestWithTimeout } from '../../common/functions';
 import {
   EMPTY_STRING,
@@ -73,6 +77,7 @@ interface SendCoinResult {
 const ARRR_OUTER_MAX = 36;
 const ARRR_INNER_MAX = 60;
 const ARRR_POLL_MS = 5000;
+const RECIPIENT_NAME_LOOKUP_DEBOUNCE_MS = 800;
 
 async function ensureAccountUnlocked(): Promise<boolean> {
   const result = (await qdnRequest({
@@ -118,6 +123,12 @@ export function CoinDetail({ chain }: Props) {
   const [recipient, setRecipient] = useState(
     () => searchParams.get('to') ?? EMPTY_STRING
   );
+  const [recipientMode, setRecipientMode] = useState<'address' | 'name'>(
+    'address'
+  );
+  const [recipientName, setRecipientName] = useState(EMPTY_STRING);
+  const [resolution, setResolution] = useState<ContactResolution | null>(null);
+  const [resolvingRecipient, setResolvingRecipient] = useState(false);
   const [nativeFee, setNativeFee] = useState<string>('');
   const [foreignFeePerByte, setForeignFeePerByte] = useState<string>('');
   const [feeLoading, setFeeLoading] = useState(false);
@@ -412,6 +423,10 @@ export function CoinDetail({ chain }: Props) {
     setAmount('');
     setSendMax(false);
     setRecipient(EMPTY_STRING);
+    setRecipientMode('address');
+    setRecipientName(EMPTY_STRING);
+    setResolution(null);
+    setResolvingRecipient(false);
     setSendResult(null);
     setSendResponse(null);
     setNativeFee(chain.isNative ? String(chain.defaultFee) : '');
@@ -435,6 +450,31 @@ export function CoinDetail({ chain }: Props) {
     setFeeLoading(false);
   }, [chain.coinEnum, chain.defaultFee, chain.isNative]);
 
+  useEffect(() => {
+    if (recipientMode !== 'name') return;
+    const trimmed = recipientName.trim();
+    if (!trimmed) {
+      setResolution(null);
+      setRecipient(EMPTY_STRING);
+      return;
+    }
+    let cancelled = false;
+    setResolvingRecipient(true);
+    const timeout = setTimeout(async () => {
+      const result = await resolveContact(trimmed, chain.coinEnum);
+      if (cancelled) return;
+      setResolution(result);
+      setRecipient(
+        result.status === 'resolved' ? result.address : EMPTY_STRING
+      );
+      setResolvingRecipient(false);
+    }, RECIPIENT_NAME_LOOKUP_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [recipientName, recipientMode, chain.coinEnum]);
+
   const handleCopy = () => {
     if (!address) return;
     copyToClipboard(address).then(() => {
@@ -449,11 +489,27 @@ export function CoinDetail({ chain }: Props) {
     setSending(true);
     try {
       if (!(await ensureAccountUnlocked())) return;
+
+      let effectiveRecipient = recipient;
+      if (recipientMode === 'name') {
+        const fresh = await resolveContact(
+          recipientName.trim(),
+          chain.coinEnum
+        );
+        setResolution(fresh);
+        if (fresh.status !== 'resolved') return;
+        if (fresh.address !== recipient) {
+          setRecipient(fresh.address);
+          return; // address changed since the field was filled - force re-confirmation
+        }
+        effectiveRecipient = fresh.address;
+      }
+
       let result: SendCoinResult | null = null;
       if (chain.isNative) {
         const res = await qdnRequest({
           action: 'SEND_QORT',
-          recipient,
+          recipient: effectiveRecipient,
           amount: parseFloat(amount),
         } as any);
         if (res?.accepted === false)
@@ -462,7 +518,7 @@ export function CoinDetail({ chain }: Props) {
       } else {
         const payload: Record<string, unknown> = {
           action: 'SEND_COIN',
-          recipient,
+          recipient: effectiveRecipient,
           coin: chain.coinEnum,
         };
         if (canUseForeignSendMax && sendMax) {
@@ -497,6 +553,10 @@ export function CoinDetail({ chain }: Props) {
     setAmount('');
     setSendMax(false);
     setRecipient(EMPTY_STRING);
+    setRecipientMode('address');
+    setRecipientName(EMPTY_STRING);
+    setResolution(null);
+    setResolvingRecipient(false);
     setNativeFee('');
     setForeignFeePerByte('');
     setSearchParams({});
@@ -1288,19 +1348,79 @@ export function CoinDetail({ chain }: Props) {
                   />
                 )}
 
-                <TextField
-                  label={t('send_dialog.recipient_address')}
-                  value={recipient}
-                  onChange={(e) => setRecipient(e.target.value.trim())}
-                  fullWidth
-                  disabled={sending}
-                  error={showRecipientError}
-                  helperText={
-                    showRecipientError
-                      ? t('send_dialog.recipient_invalid')
-                      : undefined
-                  }
-                />
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Button
+                    size="small"
+                    variant={
+                      recipientMode === 'address' ? 'contained' : 'outlined'
+                    }
+                    onClick={() => setRecipientMode('address')}
+                    disabled={sending}
+                  >
+                    {t('send_dialog.recipient_mode_address')}
+                  </Button>
+                  <Button
+                    size="small"
+                    variant={
+                      recipientMode === 'name' ? 'contained' : 'outlined'
+                    }
+                    onClick={() => setRecipientMode('name')}
+                    disabled={sending}
+                  >
+                    {t('send_dialog.recipient_mode_name')}
+                  </Button>
+                </Box>
+
+                {recipientMode === 'address' ? (
+                  <TextField
+                    label={t('send_dialog.recipient_address')}
+                    value={recipient}
+                    onChange={(e) => setRecipient(e.target.value.trim())}
+                    fullWidth
+                    disabled={sending}
+                    error={showRecipientError}
+                    helperText={
+                      showRecipientError
+                        ? t('send_dialog.recipient_invalid')
+                        : undefined
+                    }
+                  />
+                ) : (
+                  <>
+                    <TextField
+                      label={t('send_dialog.recipient_name')}
+                      value={recipientName}
+                      onChange={(e) => setRecipientName(e.target.value)}
+                      fullWidth
+                      disabled={sending}
+                    />
+                    {resolvingRecipient && (
+                      <Typography variant="caption">
+                        {t('send_dialog.resolving_recipient')}
+                      </Typography>
+                    )}
+                    {!resolvingRecipient &&
+                      resolution?.status === 'resolved' && (
+                        <Typography variant="caption" sx={{ color: c.success }}>
+                          {t('send_dialog.resolved_to', {
+                            name: resolution.name,
+                            ticker: chain.ticker,
+                            address: resolution.address,
+                          })}
+                        </Typography>
+                      )}
+                    {!resolvingRecipient &&
+                      resolution &&
+                      resolution.status !== 'resolved' && (
+                        <Typography variant="caption" sx={{ color: c.error }}>
+                          {t(
+                            `send_dialog.resolution_${resolution.status.replace(/-/g, '_')}`,
+                            { name: resolution.name }
+                          )}
+                        </Typography>
+                      )}
+                  </>
+                )}
 
                 {!chain.isNative && (
                   <TextField

@@ -7,6 +7,9 @@ import i18n from '../../../i18n/i18n';
 import { CoinDetail } from '../CoinDetail';
 import type { ChainConfig } from '../../../config/chains';
 import { decimalToAtomic } from '../../../utils/walletSend';
+import * as resolveContactModule from '../../../utils/resolveContact';
+
+vi.mock('../../../utils/resolveContact');
 
 vi.mock('react-qr-code', () => ({
   default: () => null,
@@ -210,6 +213,145 @@ describe('CoinDetail foreign send flow', () => {
     await user.type(feeInput, '0.0002');
     fireEvent.change(recipientInput, { target: { value: 'a'.repeat(257) } });
     expect(confirm).toBeDisabled();
+    expect(sendCalls(qdnRequestMock)).toHaveLength(0);
+  });
+});
+
+describe('CoinDetail recipient-by-name flow', () => {
+  let qdnRequestMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
+    vi.clearAllMocks();
+
+    qdnRequestMock = vi.fn(async (opts: Record<string, unknown>) => {
+      switch (opts.action) {
+        case 'SHOW_ACTIONS':
+          return ['SEND_COIN', 'GET_WALLET_BALANCE'];
+        case 'GET_USER_WALLET':
+          return { address: 'btc-wallet-address' };
+        case 'GET_WALLET_BALANCE':
+          return '123456789';
+        case 'GET_USER_WALLET_TRANSACTIONS':
+          return [];
+        case 'GET_FOREIGN_FEE':
+          return { fee: '0.0002' };
+        case 'UNLOCK_SELECTED_ACCOUNT':
+          return { isUnlocked: true };
+        case 'SEND_COIN':
+          return preparedResult(opts);
+        default:
+          return null;
+      }
+    });
+    (globalThis as any).qdnRequest = qdnRequestMock;
+  });
+
+  afterEach(() => {
+    delete (globalThis as any).qdnRequest;
+  });
+
+  it('defaults to Address mode with the plain recipient field', async () => {
+    const user = userEvent.setup();
+    renderDetail();
+    await openSendDialog(user);
+
+    expect(screen.getByLabelText(/recipient address/i)).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/recipient's qortium name/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it('switching to Name mode resolves and displays the address, and Confirm Send uses it', async () => {
+    const user = userEvent.setup();
+    vi.mocked(resolveContactModule.resolveContact).mockResolvedValue({
+      status: 'resolved',
+      address: 'btc-resolved-address',
+      coin: 'BTC',
+      name: 'Alice',
+    });
+
+    renderDetail();
+    await openSendDialog(user);
+    await user.click(screen.getByRole('button', { name: /^name$/i }));
+    await user.type(
+      screen.getByLabelText(/recipient's qortium name/i),
+      'Alice'
+    );
+
+    expect(
+      await screen.findByText(
+        /sending to Alice's BTC address: btc-resolved-address/i
+      )
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText(/amount \(BTC\)/i), '1.25');
+    await user.click(screen.getByRole('button', { name: /confirm send/i }));
+
+    await waitFor(() => expect(sendCalls(qdnRequestMock)).toHaveLength(1));
+    expect(sendCalls(qdnRequestMock)[0]).toMatchObject({
+      recipient: 'btc-resolved-address',
+    });
+  });
+
+  it('shows the coin-not-published message and disables Confirm Send', async () => {
+    const user = userEvent.setup();
+    vi.mocked(resolveContactModule.resolveContact).mockResolvedValue({
+      status: 'coin-not-published',
+      name: 'Alice',
+      coin: 'BTC',
+    });
+
+    renderDetail();
+    await openSendDialog(user);
+    await user.click(screen.getByRole('button', { name: /^name$/i }));
+    await user.type(
+      screen.getByLabelText(/recipient's qortium name/i),
+      'Alice'
+    );
+    await user.type(screen.getByLabelText(/amount \(BTC\)/i), '1.25');
+
+    expect(
+      await screen.findByText(
+        /alice hasn't published an address for this coin/i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /confirm send/i })
+    ).toBeDisabled();
+  });
+
+  it('re-resolves right before sending and blocks if the address changed since the field was filled', async () => {
+    const user = userEvent.setup();
+    vi.mocked(resolveContactModule.resolveContact)
+      .mockResolvedValueOnce({
+        status: 'resolved',
+        address: 'btc-old-address',
+        coin: 'BTC',
+        name: 'Alice',
+      })
+      .mockResolvedValueOnce({
+        status: 'resolved',
+        address: 'btc-new-address',
+        coin: 'BTC',
+        name: 'Alice',
+      });
+
+    renderDetail();
+    await openSendDialog(user);
+    await user.click(screen.getByRole('button', { name: /^name$/i }));
+    await user.type(
+      screen.getByLabelText(/recipient's qortium name/i),
+      'Alice'
+    );
+    await screen.findByText(/btc-old-address/i);
+    await user.type(screen.getByLabelText(/amount \(BTC\)/i), '1.25');
+
+    await user.click(screen.getByRole('button', { name: /confirm send/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/btc-new-address/i)).toBeInTheDocument()
+    );
     expect(sendCalls(qdnRequestMock)).toHaveLength(0);
   });
 });
