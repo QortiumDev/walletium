@@ -121,10 +121,10 @@ export function TopBar() {
       try {
         const list = await qdnRequest({
           action: 'GET_LIST',
-          listName: 'followedNames',
+          listName: 'followedQdn',
         });
         setIsFollowed(
-          Array.isArray(list) && (list as string[]).includes(APP_QDN_NAME)
+          Array.isArray(list) && (list as string[]).includes(`*/${APP_QDN_NAME}`)
         );
       } catch {
         // Follow-list state is optional chrome; ignore unavailable list APIs.
@@ -161,15 +161,15 @@ export function TopBar() {
       if (isFollowed) {
         await qdnRequest({
           action: 'REMOVE_FROM_LIST',
-          listName: 'followedNames',
-          items: [APP_QDN_NAME],
+          listName: 'followedQdn',
+          items: [`*/${APP_QDN_NAME}`],
         });
         setIsFollowed(false);
       } else {
         await qdnRequest({
           action: 'ADD_TO_LIST',
-          listName: 'followedNames',
-          items: [APP_QDN_NAME],
+          listName: 'followedQdn',
+          items: [`*/${APP_QDN_NAME}`],
         });
         setIsFollowed(true);
       }
