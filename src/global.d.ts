@@ -5,6 +5,7 @@ interface QdnRequestOptions {
   address?: string;
   amount?: number | string;
   assetId?: number;
+  assetName?: string;
   base64?: string;
   blockchain?: string;
   blob?: Blob;
@@ -23,6 +24,7 @@ interface QdnRequestOptions {
   encryptedData?: string;
   exactMatchNames?: boolean;
   excludeBlocked?: boolean;
+  excludeZero?: boolean;
   fee?: number | string;
   feePerByte?: string;
   file?: File;
