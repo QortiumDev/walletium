@@ -72,7 +72,10 @@ export function AssetBlock({
       sx={{
         aspectRatio: '1 / 1',
         border: `${tokens.shape.borderWidth} solid ${c.borderLight}`,
-        borderRadius: `${tokens.shape.radius}px`,
+        // Round (not the rounded-square coin tiles) - the shape itself is
+        // the at-a-glance cue that this is a Qortium asset, not a coin.
+        borderRadius: '50%',
+        overflow: 'hidden',
         bgcolor: hovered ? c.accent : c.surface,
         cursor: dragListeners ? (isDragging ? 'grabbing' : 'grab') : 'pointer',
         display: 'flex',
@@ -180,7 +183,7 @@ export function AssetBlock({
         </Box>
       </Box>
 
-      <Box sx={{ textAlign: 'center', width: '100%', overflow: 'hidden' }}>
+      <Box sx={{ textAlign: 'center', width: '82%', mx: 'auto', overflow: 'hidden' }}>
         <Box
           sx={{
             fontSize: '0.65rem',
