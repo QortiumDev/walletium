@@ -1,14 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MemoryRouter, useLocation } from 'react-router-dom';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ThemeProviderWrapper from '../../../styles/theme/theme-provider';
 import i18n from '../../../i18n/i18n';
 import { MyContactCardPage } from '../MyContactCardPage';
-
-vi.mock('qapp-core', () => ({
-  useGlobal: () => ({ auth: { name: 'Alice' } }),
-}));
 
 vi.mock('../../../hooks/useSupportedChains', () => ({
   useSupportedChains: () => ({
@@ -62,8 +58,17 @@ describe('MyContactCardPage', () => {
     localStorage.clear();
     publishContactCard.mockReset();
     publishContactCard.mockResolvedValue({ publishedAt: 1 });
-    (globalThis as any).qdnRequest = vi.fn(async () => ({ address: 'addr' }));
+    (globalThis as any).qdnRequest = vi.fn(async () => ({
+      address: 'addr',
+      name: 'Alice',
+    }));
   });
+
+  async function findEnabledPublishButton() {
+    const button = await screen.findByRole('button', { name: /^publish$/i });
+    await waitFor(() => expect(button).toBeEnabled());
+    return button;
+  }
 
   afterEach(() => {
     delete (globalThis as any).qdnRequest;
@@ -87,7 +92,7 @@ describe('MyContactCardPage', () => {
     expect(rows.getByText('LTC')).toBeInTheDocument();
   });
 
-  it('shows every coin switched on (public) by default', () => {
+  it('shows every coin switched on (included) by default', () => {
     renderPage();
     for (const sw of screen.getAllByRole('switch')) {
       expect(sw).toBeChecked();
@@ -108,10 +113,10 @@ describe('MyContactCardPage', () => {
     const user = userEvent.setup();
     renderPage();
 
-    // Turn BTC private; LTC is left untouched and should still publish as
-    // "published" since coins are public by default.
+    // Turn BTC private; LTC is left untouched and should still be sent as
+    // "published" since coins are included by default.
     await user.click(screen.getAllByRole('switch')[0]);
-    await user.click(screen.getByRole('button', { name: /^publish$/i }));
+    await user.click(await findEnabledPublishButton());
 
     expect(publishContactCard).toHaveBeenCalledWith(
       {
@@ -128,9 +133,36 @@ describe('MyContactCardPage', () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getByRole('button', { name: /^publish$/i }));
+    await user.click(await findEnabledPublishButton());
 
     expect(await screen.findByText(/publish failed/i)).toBeInTheDocument();
+  });
+
+  it('enables the publish button once GET_SELECTED_ACCOUNT resolves a name', async () => {
+    renderPage();
+
+    expect(screen.getByRole('button', { name: /^publish$/i })).toBeDisabled();
+    expect(await findEnabledPublishButton()).toBeEnabled();
+  });
+
+  it('publishes using the account name even without a primary name set', async () => {
+    // Mirrors GET_SELECTED_ACCOUNT falling back to the account's first owned
+    // name when no primary name is set - the case that left the button
+    // permanently disabled when this page read the name via qapp-core's
+    // useGlobal()/GET_PRIMARY_NAME instead.
+    (globalThis as any).qdnRequest = vi.fn(async () => ({
+      address: 'addr',
+      name: 'SecondaryName',
+    }));
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await findEnabledPublishButton());
+
+    expect(publishContactCard).toHaveBeenCalledWith(
+      expect.anything(),
+      'SecondaryName'
+    );
   });
 
   it('navigates to the find-a-person page when the button is clicked', async () => {

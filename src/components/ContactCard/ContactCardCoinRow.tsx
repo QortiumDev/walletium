@@ -165,7 +165,7 @@ export function ContactCardCoinRow({
               }}
             >
               {published
-                ? t('core:contact_card_published')
+                ? t('core:contact_card_switch_publish')
                 : t('core:contact_card_private')}
             </Box>
           }

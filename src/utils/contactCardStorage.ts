@@ -18,8 +18,10 @@ export function getContactCardLocalState(): ContactCardLocalState {
   }
 }
 
-// Coins default to "published" - contact cards are public by default and the
-// user opts individual coins out to "private", rather than opting each one in.
+// Coins default to "published" - an opt-out model where every coin is
+// included the next time the card is published unless the user switches it
+// off to "private", rather than opting each one in. Nothing is actually
+// public until that publish happens.
 const DEFAULT_DECISION: ContactCardDecision = 'published';
 
 export function getCoinState(coin: string): ContactCardCoinState {
