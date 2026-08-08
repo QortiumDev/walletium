@@ -110,3 +110,11 @@ export const paymentNotificationRegistrationStatusAtom =
 export const paymentNotificationRegistrationErrorAtom = atom<string | null>(
   null
 );
+
+// Asset ids the user has explicitly chosen to track even at a zero balance
+// (e.g. before receiving one). Assets with a positive balance always show
+// regardless of this list - see useAssetHoldings.
+export const pinnedAssetIdsAtom = atomWithStorage<number[]>(
+  'qw-pinned-assets',
+  []
+);

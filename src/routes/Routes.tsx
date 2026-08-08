@@ -5,6 +5,7 @@ if (_startRoute) window.location.hash = _startRoute;
 import { AppWrapper } from '../AppWrapper';
 import { CoinGrid } from '../components/wallet/CoinGrid';
 import { CoinDetail } from '../components/wallet/CoinDetail';
+import { AssetDetail } from '../components/wallet/AssetDetail';
 import { UnifiedHistory } from '../components/wallet/UnifiedHistory';
 import { MyContactCardPage } from '../components/ContactCard/MyContactCardPage';
 import { FindPersonPage } from '../components/ContactCard/FindPersonPage';
@@ -18,6 +19,13 @@ function CoinDetailRouter() {
   return <CoinDetail chain={chain} />;
 }
 
+function AssetDetailRouter() {
+  const { assetId } = useParams<{ assetId: string }>();
+  const parsed = Number(assetId);
+  if (!Number.isInteger(parsed) || parsed < 0) return null;
+  return <AssetDetail assetId={parsed} />;
+}
+
 const router = createHashRouter([
   {
     path: '/',
@@ -25,6 +33,7 @@ const router = createHashRouter([
     children: [
       { index: true, element: <CoinGrid /> },
       { path: ':coinRoute', element: <CoinDetailRouter /> },
+      { path: 'asset/:assetId', element: <AssetDetailRouter /> },
       { path: 'history', element: <UnifiedHistory /> },
       { path: 'contacts', element: <MyContactCardPage /> },
       { path: 'contacts/find', element: <FindPersonPage /> },
