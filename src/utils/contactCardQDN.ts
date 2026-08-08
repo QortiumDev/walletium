@@ -1,8 +1,8 @@
-import { objectToBase64 } from 'qapp-core';
+import { base64ToObject, objectToBase64 } from 'qapp-core';
 import type { ContactCardLocalState, ContactCardQDNData } from './Types';
 
 const IDENTIFIER = 'walletium-contactcard';
-const SERVICE = 'DOCUMENT';
+const SERVICE = 'JSON';
 
 export type ContactCardFetchResult =
   | { status: 'found'; data: ContactCardQDNData }
@@ -37,7 +37,15 @@ export async function fetchContactCard(
 
   if (!raw) return { status: 'not-found' };
 
-  const data = raw as ContactCardQDNData;
+  // The bridge returns the raw base64 string for encoding: 'base64' - it
+  // does not decode/parse it, regardless of the resource's service type.
+  let data: ContactCardQDNData;
+  try {
+    data = base64ToObject(raw as string) as ContactCardQDNData;
+  } catch (err) {
+    return { status: 'fetch-failed', error: err };
+  }
+
   if (!data || typeof data.addresses !== 'object' || data.addresses === null) {
     return {
       status: 'fetch-failed',
@@ -124,6 +132,7 @@ export async function publishContactCard(
       name: userName,
       identifier: IDENTIFIER,
       base64,
+      filename: `${IDENTIFIER}.json`,
     });
 
     return { publishedAt: lastUpdated };

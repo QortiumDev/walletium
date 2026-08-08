@@ -1,10 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Button, IconButton } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useAtomValue } from 'jotai';
-import { useGlobal } from 'qapp-core';
 import { useSupportedChains } from '../../hooks/useSupportedChains';
 import { uiStyleAtom } from '../../state/global/system';
 import { useColors } from '../../theme/ColorTokensContext';
@@ -27,7 +26,7 @@ export function MyContactCardPage() {
   const uiStyle = useAtomValue(uiStyleAtom);
   const isClassic = uiStyle === 'classic';
   const { chains } = useSupportedChains();
-  const userName = useGlobal().auth.name as string | undefined;
+  const [userName, setUserName] = useState<string | null>(null);
   const [localState, setLocalState] = useState<ContactCardLocalState>(() =>
     getContactCardLocalState()
   );
@@ -35,10 +34,30 @@ export function MyContactCardPage() {
     null
   );
 
-  // Coins are public by default (see contactCardStorage's DEFAULT_DECISION),
+  // qapp-core's useGlobal()/useAuth() resolve the name via GET_PRIMARY_NAME
+  // through qortalRequest, which Qortium Home doesn't provide (Qortium only
+  // exposes qdnRequest, and GET_PRIMARY_NAME isn't one of its actions), so
+  // that name is always empty here. GET_SELECTED_ACCOUNT is the Qortium-native
+  // equivalent and already falls back from primary name to the account's
+  // first owned name, so a user without a primary name can still publish.
+  useEffect(() => {
+    let cancelled = false;
+    qdnRequest({ action: 'GET_SELECTED_ACCOUNT' })
+      .then((res: { name?: string | null } | null) => {
+        if (!cancelled) setUserName(res?.name ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setUserName(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Coins are included by default (see contactCardStorage's DEFAULT_DECISION),
   // so untouched chains need an explicit entry here too - otherwise they'd
-  // show as "published" in the switches but be silently left out of what
-  // actually gets sent to publishContactCard, which only reads localState.
+  // show as switched on in the UI but be silently left out of what actually
+  // gets sent to publishContactCard, which only reads localState.
   const effectiveState = useMemo(() => {
     const merged: ContactCardLocalState = {};
     for (const chain of chains) {

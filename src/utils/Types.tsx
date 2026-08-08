@@ -72,3 +72,50 @@ export interface ContactCardCoinState {
 }
 
 export type ContactCardLocalState = Record<string, ContactCardCoinState>;
+
+// Raw shape of Core's AssetData (GET /assets/info, /assets), field names as
+// serialized (isDivisible/isUnspendable/isOwnerForSale keep their "is" prefix).
+export interface AssetData {
+  assetId: number;
+  owner: string;
+  name: string;
+  description?: string;
+  quantity: string;
+  isDivisible: boolean;
+  data?: string;
+  isUnspendable: boolean;
+  creationGroupId: number;
+  isOwnerForSale: boolean;
+  ownerSalePrice?: string;
+  ownerSaleRecipient?: string;
+  reducedAssetName?: string;
+}
+
+// Raw shape of Core's AccountBalanceData (GET /assets/balances).
+export interface AssetBalanceData {
+  address: string;
+  assetId: number;
+  balance: string;
+  assetName?: string;
+}
+
+// Either an asset id or an asset name - the same either/or contract Home's
+// GET_ASSET_INFO takes (assetId wins if both are given).
+export type AssetSelector = { assetId: number } | { assetName: string };
+
+// A holding shown in the wallet: asset metadata plus this account's balance,
+// merged from AssetData + AssetBalanceData (or a zero balance for pinned
+// assets the account doesn't currently hold).
+export interface AssetHolding {
+  assetId: number;
+  name: string;
+  description?: string;
+  owner: string;
+  quantity: string;
+  isDivisible: boolean;
+  data?: string;
+  isOwnerForSale: boolean;
+  ownerSalePrice?: string;
+  balance: string; // atomic units, as returned by /assets/balances
+  pinned: boolean; // true when kept visible via the local pinned-assets list
+}

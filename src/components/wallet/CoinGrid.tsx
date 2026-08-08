@@ -26,11 +26,17 @@ import { CSS } from '@dnd-kit/utilities';
 import { useSupportedChains } from '../../hooks/useSupportedChains';
 import { useMarketPrices } from '../../hooks/useMarketPrices';
 import { useCoinImageUrl } from '../../hooks/useCoinImageUrl';
+import { useAssetHoldings } from '../../hooks/useAssetHoldings';
 import { CoinListRow } from './CoinListRow';
+import { AssetBlock } from './AssetBlock';
+import { AssetListRow } from './AssetListRow';
+import { AddAssetTile, AddAssetRow, AddAssetDialog } from './AddAssetDialog';
 import { requestWithTimeout, formatFiat } from '../../common/functions';
+import { formatAssetBalance } from '../../utils/assetAmount';
 import { tokens } from '../../theme/tokens';
 import { useColors } from '../../theme/ColorTokensContext';
 import type { ChainConfig } from '../../config/chains';
+import type { AssetHolding } from '../../utils/Types';
 import {
   sortModeAtom,
   customOrderAtom,
@@ -42,6 +48,16 @@ import {
   walletReadyAtom,
   viewModeAtom,
 } from '../../state/global/system';
+
+type WalletItem =
+  | { kind: 'chain'; key: string; chain: ChainConfig }
+  | { kind: 'asset'; key: string; asset: AssetHolding };
+
+function itemName(item: WalletItem): string {
+  return item.kind === 'chain'
+    ? item.chain.name
+    : item.asset.name || `Asset #${item.asset.assetId}`;
+}
 
 // Min tile width in px per zoom level — CSS auto-fill guarantees each level is visually distinct
 const TILE_MIN_PX: Record<number, number> = {
@@ -452,6 +468,65 @@ function SortableCoinItem({
   );
 }
 
+function SortableAssetItem({
+  asset,
+  canSend,
+  tileSize,
+  isCustomMode,
+  viewMode,
+}: {
+  asset: AssetHolding;
+  canSend: boolean;
+  tileSize: number;
+  isCustomMode: boolean;
+  viewMode: 'grid' | 'list';
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: `asset:${asset.assetId}` });
+
+  return (
+    <Box
+      ref={setNodeRef}
+      {...(viewMode === 'grid' && isCustomMode ? (attributes as any) : {})}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition: isDragging ? undefined : (transition ?? undefined),
+        zIndex: isDragging ? 10 : undefined,
+        position: 'relative',
+      }}
+    >
+      {viewMode === 'list' ? (
+        <AssetListRow
+          asset={asset}
+          canSend={canSend}
+          dragHandleProps={
+            isCustomMode
+              ? ({ ...attributes, ...listeners } as Record<string, unknown>)
+              : undefined
+          }
+          isDragging={isDragging}
+        />
+      ) : (
+        <AssetBlock
+          asset={asset}
+          canSend={canSend}
+          tileSize={tileSize}
+          dragListeners={
+            isCustomMode ? (listeners as Record<string, unknown>) : undefined
+          }
+          isDragging={isDragging}
+        />
+      )}
+    </Box>
+  );
+}
+
 export function CoinGrid() {
   const { chains } = useSupportedChains();
   const c = useColors();
@@ -463,7 +538,10 @@ export function CoinGrid() {
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [canSendNative, setCanSendNative] = useState(true);
   const [canSendForeign, setCanSendForeign] = useState(true);
+  const [canSendAsset, setCanSendAsset] = useState(true);
   const walletReady = useAtomValue(walletReadyAtom);
+  const { assets, loading: assetsLoading, pinAsset } = useAssetHoldings();
+  const [addAssetOpen, setAddAssetOpen] = useState(false);
 
   useEffect(() => {
     qdnRequest({ action: 'SHOW_ACTIONS' })
@@ -471,6 +549,7 @@ export function CoinGrid() {
         if (Array.isArray(actions)) {
           setCanSendNative(actions.includes('SEND_QORT'));
           setCanSendForeign(actions.includes('SEND_COIN'));
+          setCanSendAsset(actions.includes('TRANSFER_ASSET'));
         }
       })
       .catch(() => {
@@ -485,39 +564,59 @@ export function CoinGrid() {
   const [tileSize] = useAtom(tileSizeAtom);
   const [viewMode] = useAtom(viewModeAtom);
 
-  // Merge newly discovered chains into the persisted order; remove any that no longer exist
+  const items = useMemo<WalletItem[]>(
+    () => [
+      ...chains.map((chain) => ({ kind: 'chain' as const, key: chain.key, chain })),
+      ...assets.map((asset) => ({
+        kind: 'asset' as const,
+        key: `asset:${asset.assetId}`,
+        asset,
+      })),
+    ],
+    [chains, assets]
+  );
+
+  const itemBalanceStr = (item: WalletItem): string | null => {
+    if (item.kind === 'chain') return balances[item.key] ?? null;
+    return formatAssetBalance(item.asset.balance, item.asset.isDivisible);
+  };
+  const itemIsLoading = (item: WalletItem): boolean =>
+    item.kind === 'chain' ? (loading[item.key] ?? true) : assetsLoading;
+
+  // Merge newly discovered chains/assets into the persisted order; remove any that no longer exist
   useEffect(() => {
-    const chainKeys = chains.map((c) => c.key);
+    const itemKeys = items.map((item) => item.key);
     setCustomOrder((prev: string[]) => {
-      const filtered = prev.filter((k: string) => chainKeys.includes(k));
-      const added = chainKeys.filter((k: string) => !prev.includes(k));
+      const filtered = prev.filter((k: string) => itemKeys.includes(k));
+      const added = itemKeys.filter((k: string) => !prev.includes(k));
       const merged = [...filtered, ...added];
       if (merged.join(',') === prev.join(',')) return prev;
       return merged;
     });
-  }, [chains]);
+  }, [items]);
 
-  const sortedChains = useMemo(() => {
-    const arr = [...chains];
+  const sortedItems = useMemo(() => {
+    const arr = [...items];
     if (sortMode === 'name-asc')
-      return arr.sort((a, b) => a.name.localeCompare(b.name));
+      return arr.sort((a, b) => itemName(a).localeCompare(itemName(b)));
     if (sortMode === 'name-desc')
-      return arr.sort((a, b) => b.name.localeCompare(a.name));
+      return arr.sort((a, b) => itemName(b).localeCompare(itemName(a)));
     if (sortMode === 'balance-asc' || sortMode === 'balance-desc') {
       const dir = sortMode === 'balance-asc' ? 1 : -1;
       return arr.sort((a, b) => {
-        const aLoading = loading[a.key] !== false;
-        const bLoading = loading[b.key] !== false;
+        const aLoading = itemIsLoading(a);
+        const bLoading = itemIsLoading(b);
         if (aLoading && bLoading) return 0;
         if (aLoading) return 1;
         if (bLoading) return -1;
-        const ba = balances[a.key];
-        const bb = balances[b.key];
+        const ba = itemBalanceStr(a);
+        const bb = itemBalanceStr(b);
         if (ba === null && bb === null) return 0;
         if (ba === null) return 1;
         if (bb === null) return -1;
-        const priceA = prices[a.coinEnum] ?? 0;
-        const priceB = prices[b.coinEnum] ?? 0;
+        // Assets have no market price feed, so they sort as 0 fiat value here.
+        const priceA = a.kind === 'chain' ? (prices[a.chain.coinEnum] ?? 0) : 0;
+        const priceB = b.kind === 'chain' ? (prices[b.chain.coinEnum] ?? 0) : 0;
         const fiatA = parseFloat(ba) * priceA;
         const fiatB = parseFloat(bb) * priceB;
         return dir * (fiatA - fiatB);
@@ -532,17 +631,19 @@ export function CoinGrid() {
       if (bi === -1) return -1;
       return ai - bi;
     });
-  }, [sortMode, customOrder, chains, balances, loading, prices]);
+  }, [sortMode, customOrder, items, balances, loading, prices, assetsLoading]);
 
-  const visibleChains = useMemo(() => {
-    if (!hideZero) return sortedChains;
-    return sortedChains.filter((chain) => {
-      if (loading[chain.key] !== false) return false;
-      const bal = balances[chain.key];
+  const visibleItems = useMemo(() => {
+    if (!hideZero) return sortedItems;
+    return sortedItems.filter((item) => {
+      // Pinned assets stay visible even at a zero balance - that's the point of pinning.
+      if (item.kind === 'asset' && item.asset.pinned) return true;
+      if (itemIsLoading(item)) return false;
+      const bal = itemBalanceStr(item);
       if (bal === null) return false;
       return parseFloat(bal) > 0;
     });
-  }, [hideZero, sortedChains, loading, balances]);
+  }, [hideZero, sortedItems, loading, balances, assetsLoading]);
 
   const { fiatDisplays, portfolioTotal } = useMemo(() => {
     const displays: Record<string, string | undefined> = {};
@@ -583,12 +684,12 @@ export function CoinGrid() {
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = visibleChains.findIndex((c) => c.key === active.id);
-    const newIndex = visibleChains.findIndex((c) => c.key === over.id);
+    const oldIndex = visibleItems.findIndex((item) => item.key === active.id);
+    const newIndex = visibleItems.findIndex((item) => item.key === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
     setCustomOrder(
       arrayMove(
-        visibleChains.map((c) => c.key),
+        visibleItems.map((item) => item.key),
         oldIndex,
         newIndex
       )
@@ -674,7 +775,7 @@ export function CoinGrid() {
         onDragEnd={handleDragEnd}
       >
         <SortableContext
-          items={visibleChains.map((c) => c.key)}
+          items={visibleItems.map((item) => item.key)}
           strategy={
             viewMode === 'list'
               ? verticalListSortingStrategy
@@ -692,22 +793,44 @@ export function CoinGrid() {
               gap: viewMode === 'list' ? 1 : 1.5,
             }}
           >
-            {visibleChains.map((chain) => (
-              <SortableCoinItem
-                key={chain.key}
-                chain={chain}
-                balance={balances[chain.key] ?? null}
-                canSend={chain.isNative ? canSendNative : canSendForeign}
-                loading={loading[chain.key] ?? true}
-                tileSize={tileSize}
-                fiatDisplay={fiatDisplays[chain.key]}
-                isCustomMode={isCustom}
-                viewMode={viewMode}
-              />
-            ))}
+            {visibleItems.map((item) =>
+              item.kind === 'chain' ? (
+                <SortableCoinItem
+                  key={item.key}
+                  chain={item.chain}
+                  balance={balances[item.key] ?? null}
+                  canSend={item.chain.isNative ? canSendNative : canSendForeign}
+                  loading={loading[item.key] ?? true}
+                  tileSize={tileSize}
+                  fiatDisplay={fiatDisplays[item.key]}
+                  isCustomMode={isCustom}
+                  viewMode={viewMode}
+                />
+              ) : (
+                <SortableAssetItem
+                  key={item.key}
+                  asset={item.asset}
+                  canSend={canSendAsset}
+                  tileSize={tileSize}
+                  isCustomMode={isCustom}
+                  viewMode={viewMode}
+                />
+              )
+            )}
+            {viewMode === 'list' ? (
+              <AddAssetRow onClick={() => setAddAssetOpen(true)} />
+            ) : (
+              <AddAssetTile onClick={() => setAddAssetOpen(true)} />
+            )}
           </Box>
         </SortableContext>
       </DndContext>
+
+      <AddAssetDialog
+        open={addAssetOpen}
+        onClose={() => setAddAssetOpen(false)}
+        onSubmit={pinAsset}
+      />
     </Box>
   );
 }

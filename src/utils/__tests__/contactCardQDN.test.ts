@@ -1,10 +1,12 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 
-// Override the global qapp-core mock (from setup.ts) to include objectToBase64,
-// which contactCardQDN.ts uses to encode the publish payload. The mock keeps
-// the encoded output inspectable (JSON string) so tests can assert on shape.
+// Override the global qapp-core mock (from setup.ts) to include
+// objectToBase64/base64ToObject, which contactCardQDN.ts uses to encode the
+// publish payload and decode the fetch response. Kept as plain JSON-string
+// round-tripping (skipping real base64) so tests can assert on shape.
 vi.mock('qapp-core', () => ({
   objectToBase64: vi.fn(async (obj: unknown) => JSON.stringify(obj)),
+  base64ToObject: vi.fn((str: string) => JSON.parse(str)),
 }));
 
 import { fetchContactCard, publishContactCard } from '../contactCardQDN';
@@ -17,14 +19,16 @@ describe('fetchContactCard', () => {
     delete (global as any).qdnRequest;
   });
 
-  it('returns "found" with the parsed data when the resource exists', async () => {
+  it('returns "found" with the decoded data when the resource exists', async () => {
     const data: ContactCardQDNData = {
       version: 1,
       lastUpdated: 1000,
       addresses: { BTC: 'bc1qalice' },
     };
+    // The real bridge, with encoding: 'base64', resolves the raw (base64)
+    // string - never a pre-parsed object - regardless of service type.
     mockQdnRequest = vi.fn(async (req: Record<string, unknown>) => {
-      if (req.action === 'FETCH_QDN_RESOURCE') return data;
+      if (req.action === 'FETCH_QDN_RESOURCE') return JSON.stringify(data);
       throw new Error(`unexpected action ${req.action}`);
     });
     (global as any).qdnRequest = mockQdnRequest;
@@ -35,7 +39,7 @@ describe('fetchContactCard', () => {
     expect(mockQdnRequest).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'FETCH_QDN_RESOURCE',
-        service: 'DOCUMENT',
+        service: 'JSON',
         identifier: 'walletium-contactcard',
         name: 'Alice',
       })
@@ -71,7 +75,17 @@ describe('fetchContactCard', () => {
   });
 
   it('returns "fetch-failed" when the resource exists but is malformed (no addresses map)', async () => {
-    mockQdnRequest = vi.fn(async () => ({ version: 1, lastUpdated: 1000 }));
+    mockQdnRequest = vi.fn(async () =>
+      JSON.stringify({ version: 1, lastUpdated: 1000 })
+    );
+    (global as any).qdnRequest = mockQdnRequest;
+
+    const result = await fetchContactCard('Alice');
+    expect(result.status).toBe('fetch-failed');
+  });
+
+  it('returns "fetch-failed" when the resource exists but is not valid base64/JSON', async () => {
+    mockQdnRequest = vi.fn(async () => 'not valid json');
     (global as any).qdnRequest = mockQdnRequest;
 
     const result = await fetchContactCard('Alice');
@@ -121,8 +135,9 @@ describe('publishContactCard', () => {
     expect(result).not.toBeNull();
     const publishCall = calls.find((c) => c.action === 'PUBLISH_QDN_RESOURCE')!;
     expect(publishCall.name).toBe('Alice');
-    expect(publishCall.service).toBe('DOCUMENT');
+    expect(publishCall.service).toBe('JSON');
     expect(publishCall.identifier).toBe('walletium-contactcard');
+    expect(publishCall.filename).toBe('walletium-contactcard.json');
     const publishedData = JSON.parse(publishCall.base64 as string);
     expect(publishedData).toMatchObject({
       version: 1,
