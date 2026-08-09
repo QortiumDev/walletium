@@ -723,7 +723,7 @@ export function CoinGrid() {
 
     chains.forEach(async (chain) => {
       await acquire();
-      const MAX_ATTEMPTS = 2;
+      const MAX_ATTEMPTS = 3;
       const RETRY_DELAY = 1200;
       try {
         for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
@@ -736,7 +736,7 @@ export function CoinGrid() {
             } else {
               const res = await requestWithTimeout(
                 { action: 'GET_WALLET_BALANCE', coin: chain.coinEnum },
-                30000
+                45000
               );
               if (res?.error) throw new Error(res.error);
               // GET_WALLET_BALANCE returns satoshis; convert to coin units
