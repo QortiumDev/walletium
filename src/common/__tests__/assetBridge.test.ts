@@ -79,14 +79,12 @@ describe('assetBridge', () => {
     (globalThis as any).qortalRequest = vi
       .fn()
       .mockRejectedValue(new Error('unsupported action'));
-    const fetchMock = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(
-        new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      );
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
 
     await requestAssetRead('qortal', {
       action: 'GET_ASSET_BALANCES',
@@ -103,14 +101,12 @@ describe('assetBridge', () => {
     (globalThis as any).qortalRequest = vi
       .fn()
       .mockRejectedValue(new Error('unsupported action'));
-    const fetchMock = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(
-        new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      );
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify([]), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
 
     await requestAssetRead('qortal', {
       action: 'GET_ASSET_TRANSFERS',
