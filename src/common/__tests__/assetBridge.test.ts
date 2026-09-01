@@ -3,6 +3,7 @@ import {
   availableAssetNetworks,
   requestAssetActions,
   requestAssetInfo,
+  requestAssetRead,
   requestAssetTransfer,
   requestAssetWallet,
 } from '../assetBridge';
@@ -72,6 +73,56 @@ describe('assetBridge', () => {
       'unsupported action'
     );
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads asset balances from Core with a lowercase assetid query param', async () => {
+    (globalThis as any).qortalRequest = vi
+      .fn()
+      .mockRejectedValue(new Error('unsupported action'));
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+    await requestAssetRead('qortal', {
+      action: 'GET_ASSET_BALANCES',
+      assetId: 42,
+      address: 'QortalAddress',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/assets/balances?address=QortalAddress&assetid=42'
+    );
+  });
+
+  it('reads asset transfers from Core with assetId as a path segment', async () => {
+    (globalThis as any).qortalRequest = vi
+      .fn()
+      .mockRejectedValue(new Error('unsupported action'));
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+    await requestAssetRead('qortal', {
+      action: 'GET_ASSET_TRANSFERS',
+      assetId: 42,
+      address: 'QortalAddress',
+      limit: 20,
+      reverse: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/assets/transfers/42?address=QortalAddress&limit=20&reverse=false'
+    );
   });
 
   it('uses Qortal native TRANSFER_ASSET when SHOW_ACTIONS is unavailable', async () => {
