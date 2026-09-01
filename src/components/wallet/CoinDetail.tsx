@@ -156,6 +156,7 @@ export function CoinDetail({ chain }: Props) {
   );
   const [qortCanUnlock, setQortCanUnlock] = useState(false);
   const [walletAvailable, setWalletAvailable] = useState(true);
+  const [canManageForeignServer, setCanManageForeignServer] = useState(false);
 
   // ARRR initialization state
   const cancelSyncRef = useRef(false);
@@ -339,12 +340,18 @@ export function CoinDetail({ chain }: Props) {
     qdnRequest({ action: 'SHOW_ACTIONS' })
       .then((actions: unknown) => {
         const advertised = Array.isArray(actions) ? actions : [];
-        setCanSend(advertised.includes('SEND_COIN'));
-        setWalletAvailable(advertised.includes('GET_WALLET_BALANCE'));
+        const foreignWalletAvailable =
+          advertised.includes('GET_WALLET_BALANCE');
+        setCanSend(foreignWalletAvailable && advertised.includes('SEND_COIN'));
+        setWalletAvailable(foreignWalletAvailable);
+        setCanManageForeignServer(
+          advertised.includes('SET_CURRENT_FOREIGN_SERVER')
+        );
       })
       .catch(() => {
         setCanSend(false);
         setWalletAvailable(false);
+        setCanManageForeignServer(false);
       });
   }, [chain.isNative]);
 
@@ -724,7 +731,7 @@ export function CoinDetail({ chain }: Props) {
           </Box>
         )}
         <Box sx={{ flexGrow: 1 }} />
-        {!chain.isNative && !isARRR && (
+        {!chain.isNative && !isARRR && canManageForeignServer && (
           <Tooltip title="ElectrumX servers">
             <IconButton
               size="small"

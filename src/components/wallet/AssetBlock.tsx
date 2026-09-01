@@ -8,6 +8,7 @@ import { tokens } from '../../theme/tokens';
 import { useColors } from '../../theme/ColorTokensContext';
 import { formatAssetBalance } from '../../utils/assetAmount';
 import type { AssetHolding } from '../../utils/Types';
+import { requestAssetWallet } from '../../common/assetBridge';
 
 interface AssetBlockProps {
   asset: AssetHolding;
@@ -38,7 +39,7 @@ export function AssetBlock({
     setHovered(true);
     if (!fetchedRef.current) {
       fetchedRef.current = true;
-      qdnRequest({ action: 'GET_USER_WALLET', assetId: 0 })
+      requestAssetWallet(asset.network)
         .then((res: any) => {
           if (res?.address) setAddress(res.address);
         })
@@ -60,13 +61,15 @@ export function AssetBlock({
 
   const handleSend = (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigate(`/asset/${asset.assetId}?send=true`);
+    navigate(`/asset/${asset.network}/${asset.assetId}?send=true`);
   };
 
   return (
     <Box
       {...(dragListeners as any)}
-      onClick={() => !isDragging && navigate(`/asset/${asset.assetId}`)}
+      onClick={() =>
+        !isDragging && navigate(`/asset/${asset.network}/${asset.assetId}`)
+      }
       onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setHovered(false)}
       sx={{
@@ -183,7 +186,14 @@ export function AssetBlock({
         </Box>
       </Box>
 
-      <Box sx={{ textAlign: 'center', width: '82%', mx: 'auto', overflow: 'hidden' }}>
+      <Box
+        sx={{
+          textAlign: 'center',
+          width: '82%',
+          mx: 'auto',
+          overflow: 'hidden',
+        }}
+      >
         <Box
           sx={{
             fontSize: '0.65rem',
@@ -198,6 +208,16 @@ export function AssetBlock({
           }}
         >
           {label}
+        </Box>
+        <Box
+          sx={{
+            fontSize: '0.5rem',
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+            color: hovered ? c.accentText : c.textSecondary,
+          }}
+        >
+          {asset.network}
         </Box>
         <Box
           sx={{

@@ -1,11 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Box,
   Button,
   CircularProgress,
   Dialog,
   DialogContent,
+  FormControl,
   IconButton,
+  InputLabel,
+  MenuItem,
+  Select,
   TextField,
   Typography,
 } from '@mui/material';
@@ -16,7 +20,11 @@ import { uiStyleAtom } from '../../state/global/system';
 import { useColors } from '../../theme/ColorTokensContext';
 import { tokens } from '../../theme/tokens';
 import type { PinAssetResult } from '../../hooks/useAssetHoldings';
-import type { AssetSelector } from '../../utils/Types';
+import type {
+  AssetNetwork,
+  AssetSelector,
+  NetworkAssetSelector,
+} from '../../utils/Types';
 
 interface AddAssetTriggerProps {
   onClick: () => void;
@@ -98,15 +106,28 @@ export function AddAssetRow({ onClick }: AddAssetTriggerProps) {
 interface AddAssetDialogProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (selector: AssetSelector) => Promise<PinAssetResult>;
+  networks: AssetNetwork[];
+  onSubmit: (selector: NetworkAssetSelector) => Promise<PinAssetResult>;
 }
 
-export function AddAssetDialog({ open, onClose, onSubmit }: AddAssetDialogProps) {
+export function AddAssetDialog({
+  open,
+  onClose,
+  networks,
+  onSubmit,
+}: AddAssetDialogProps) {
   const c = useColors();
   const isClassic = useAtomValue(uiStyleAtom) === 'classic';
   const [assetInput, setAssetInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [network, setNetwork] = useState<AssetNetwork>(
+    networks[0] ?? 'qortium'
+  );
+
+  useEffect(() => {
+    if (!networks.includes(network) && networks[0]) setNetwork(networks[0]);
+  }, [network, networks]);
 
   const handleClose = () => {
     if (submitting) return;
@@ -126,7 +147,7 @@ export function AddAssetDialog({ open, onClose, onSubmit }: AddAssetDialogProps)
       : { assetName: trimmed };
     setSubmitting(true);
     setError(null);
-    const result = await onSubmit(selector);
+    const result = await onSubmit({ ...selector, network });
     setSubmitting(false);
     if (result.ok) {
       setAssetInput('');
@@ -146,7 +167,9 @@ export function AddAssetDialog({ open, onClose, onSubmit }: AddAssetDialogProps)
         sx: {
           maxWidth: isClassic ? c.layoutMaxWidth : undefined,
           border: `${
-            isClassic ? tokens.shape.classicBorderWidth : tokens.shape.borderWidth
+            isClassic
+              ? tokens.shape.classicBorderWidth
+              : tokens.shape.borderWidth
           } solid ${isClassic ? c.border : c.borderLight}`,
           borderRadius: isClassic ? `${tokens.shape.radiusMd}px` : 0,
           bgcolor: c.surface,
@@ -162,7 +185,9 @@ export function AddAssetDialog({ open, onClose, onSubmit }: AddAssetDialogProps)
             px: 3,
             py: 2,
             borderBottom: `${
-              isClassic ? tokens.shape.classicBorderWidth : tokens.shape.borderWidth
+              isClassic
+                ? tokens.shape.classicBorderWidth
+                : tokens.shape.borderWidth
             } solid ${isClassic ? c.border : c.borderLight}`,
           }}
         >
@@ -177,16 +202,37 @@ export function AddAssetDialog({ open, onClose, onSubmit }: AddAssetDialogProps)
           >
             Add Asset
           </Box>
-          <IconButton size="small" onClick={handleClose} sx={{ borderRadius: 0 }}>
+          <IconButton
+            size="small"
+            onClick={handleClose}
+            sx={{ borderRadius: 0 }}
+          >
             <CloseIcon fontSize="small" />
           </IconButton>
         </Box>
 
         <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           <Typography sx={{ fontSize: '0.8rem', color: c.textSecondary }}>
-            Track an asset by its on-chain asset ID or name. It'll show up
-            here even before you hold a balance.
+            Track an asset by its chain and on-chain asset ID or name. It'll
+            show up here even before you hold a balance.
           </Typography>
+          {networks.length > 1 && (
+            <FormControl fullWidth disabled={submitting}>
+              <InputLabel id="asset-network-label">Chain</InputLabel>
+              <Select
+                labelId="asset-network-label"
+                label="Chain"
+                value={network}
+                onChange={(event) => {
+                  setNetwork(event.target.value as AssetNetwork);
+                  setError(null);
+                }}
+              >
+                <MenuItem value="qortium">Qortium</MenuItem>
+                <MenuItem value="qortal">Qortal</MenuItem>
+              </Select>
+            </FormControl>
+          )}
           <TextField
             label="Asset ID or name"
             value={assetInput}

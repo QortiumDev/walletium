@@ -118,3 +118,10 @@ export const pinnedAssetIdsAtom = atomWithStorage<number[]>(
   'qw-pinned-assets',
   []
 );
+
+// Kept separate so an asset id can be tracked independently on both chains.
+// The original storage key remains the Qortium list for backwards compatibility.
+export const pinnedQortalAssetIdsAtom = atomWithStorage<number[]>(
+  'qw-pinned-qortal-assets',
+  []
+);
