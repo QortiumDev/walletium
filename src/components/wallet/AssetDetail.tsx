@@ -29,37 +29,57 @@ import {
   uiStyleAtom,
   walletReadyAtom,
   pinnedAssetIdsAtom,
+  pinnedQortalAssetIdsAtom,
 } from '../../state/global/system';
-import { formatAssetBalance, formatAssetQuantity } from '../../utils/assetAmount';
 import {
-  isPositiveDecimal,
-  isValidRecipient,
-} from '../../utils/walletSend';
-import { resolveContact, type ContactResolution } from '../../utils/resolveContact';
+  formatAssetBalance,
+  formatAssetQuantity,
+} from '../../utils/assetAmount';
+import { isPositiveDecimal, isValidRecipient } from '../../utils/walletSend';
+import {
+  resolveContact,
+  type ContactResolution,
+} from '../../utils/resolveContact';
 import { copyToClipboard } from '../../common/functions';
-import { EMPTY_STRING, TIME_MINUTES_3, TIME_SECONDS_3 } from '../../common/constants';
+import {
+  EMPTY_STRING,
+  TIME_MINUTES_3,
+  TIME_SECONDS_3,
+} from '../../common/constants';
 import { TransactionRow, type TxRow } from './TransactionRow';
-import type { AssetData } from '../../utils/Types';
+import type { AssetData, AssetNetwork } from '../../utils/Types';
 import type { ChainConfig } from '../../config/chains';
+import {
+  requestAssetActions,
+  requestAssetInfo,
+  requestAssetRead,
+  requestAssetTransfer,
+  requestAssetUnlock,
+  requestAssetWallet,
+} from '../../common/assetBridge';
 
 interface Props {
   assetId: number;
+  network?: AssetNetwork;
 }
 
 const RECIPIENT_NAME_LOOKUP_DEBOUNCE_MS = 800;
 
-async function ensureAccountUnlocked(): Promise<boolean> {
-  const result = (await qdnRequest({
-    action: 'UNLOCK_SELECTED_ACCOUNT',
-  })) as { isUnlocked?: boolean } | null;
+async function ensureAccountUnlocked(network: AssetNetwork): Promise<boolean> {
+  const result = (await requestAssetUnlock(network)) as {
+    isUnlocked?: boolean;
+  } | null;
   return result?.isUnlocked === true;
 }
 
-export function AssetDetail({ assetId }: Props) {
+export function AssetDetail({ assetId, network = 'qortium' }: Props) {
   const c = useColors();
   const isClassic = useAtomValue(uiStyleAtom) === 'classic';
   const walletReady = useAtomValue(walletReadyAtom);
   const [pinnedIds, setPinnedIds] = useAtom(pinnedAssetIdsAtom);
+  const [pinnedQortalIds, setPinnedQortalIds] = useAtom(
+    pinnedQortalAssetIdsAtom
+  );
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -73,7 +93,8 @@ export function AssetDetail({ assetId }: Props) {
   const [expandedTx, setExpandedTx] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [copiedHash, setCopiedHash] = useState<number | null>(null);
-  const [canSend, setCanSend] = useState(true);
+  const [canSend, setCanSend] = useState(false);
+  const [canUnlock, setCanUnlock] = useState(false);
 
   const [sendOpen, setSendOpen] = useState(
     () => searchParams.get('send') === 'true'
@@ -94,37 +115,35 @@ export function AssetDetail({ assetId }: Props) {
     null
   );
 
-  const isPinned = pinnedIds.includes(assetId);
+  const selectedPinnedIds = network === 'qortal' ? pinnedQortalIds : pinnedIds;
+  const isPinned = selectedPinnedIds.includes(assetId);
   const isDivisible = assetInfo?.isDivisible ?? true;
   const decimalPlaces = isDivisible ? 8 : 0;
   const label = assetInfo?.name || `Asset #${assetId}`;
 
   const fetchAddress = useCallback(async () => {
     try {
-      const res = await qdnRequest({ action: 'GET_USER_WALLET', assetId: 0 });
+      const res = await requestAssetWallet(network);
       if (res?.address) setAddress(res.address);
     } catch {
       /* silent */
     }
-  }, []);
+  }, [network]);
 
   const fetchAssetInfo = useCallback(async () => {
     try {
-      const res = await qdnRequest({
-        action: 'GET_ASSET_INFO',
-        assetId,
-      });
+      const res = await requestAssetInfo(network, { assetId });
       setAssetInfo(res as AssetData);
     } catch {
       setNotFound(true);
     }
-  }, [assetId]);
+  }, [assetId, network]);
 
   const fetchBalance = useCallback(async () => {
     if (!address) return;
     setLoadingBalance(true);
     try {
-      const res = await qdnRequest({
+      const res = await requestAssetRead(network, {
         action: 'GET_ASSET_BALANCES',
         address,
         assetId,
@@ -137,13 +156,13 @@ export function AssetDetail({ assetId }: Props) {
     } finally {
       setLoadingBalance(false);
     }
-  }, [address, assetId]);
+  }, [address, assetId, network]);
 
   const fetchTransactions = useCallback(async () => {
     if (!address) return;
     setLoadingTx(true);
     try {
-      const res = await qdnRequest({
+      const res = await requestAssetRead(network, {
         action: 'GET_ASSET_TRANSFERS',
         assetId,
         address,
@@ -170,7 +189,7 @@ export function AssetDetail({ assetId }: Props) {
     } finally {
       setLoadingTx(false);
     }
-  }, [address, assetId]);
+  }, [address, assetId, network]);
 
   useEffect(() => {
     setNotFound(false);
@@ -194,14 +213,20 @@ export function AssetDetail({ assetId }: Props) {
   }, [walletReady, address, fetchBalance, fetchTransactions]);
 
   useEffect(() => {
-    qdnRequest({ action: 'SHOW_ACTIONS' })
+    setCanSend(false);
+    setCanUnlock(false);
+    requestAssetActions(network)
       .then((actions: unknown) => {
-        if (Array.isArray(actions)) setCanSend(actions.includes('TRANSFER_ASSET'));
+        if (Array.isArray(actions)) {
+          setCanSend(actions.includes('TRANSFER_ASSET'));
+          setCanUnlock(actions.includes('UNLOCK_SELECTED_ACCOUNT'));
+        }
       })
       .catch(() => {
-        /* assume full access */
+        setCanSend(false);
+        setCanUnlock(false);
       });
-  }, []);
+  }, [network]);
 
   useEffect(() => {
     if (recipientMode !== 'name') return;
@@ -216,7 +241,7 @@ export function AssetDetail({ assetId }: Props) {
     const timeout = setTimeout(async () => {
       // Assets share the account's native QORT address - resolve against the
       // QORT slot of a published contact card, same as a native QORT send.
-      const result = await resolveContact(trimmed, 'QORT');
+      const result = await resolveContact(trimmed, 'QORT', network);
       if (cancelled) return;
       setResolution(result);
       setRecipient(
@@ -228,11 +253,14 @@ export function AssetDetail({ assetId }: Props) {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [recipientName, recipientMode]);
+  }, [recipientName, recipientMode, network]);
 
   const togglePin = () => {
-    setPinnedIds((prev) =>
-      isPinned ? prev.filter((id) => id !== assetId) : [...prev, assetId]
+    const setter = network === 'qortal' ? setPinnedQortalIds : setPinnedIds;
+    setter((previous) =>
+      isPinned
+        ? previous.filter((id) => id !== assetId)
+        : [...previous, assetId]
     );
   };
 
@@ -284,11 +312,15 @@ export function AssetDetail({ assetId }: Props) {
     if (!canConfirmSend) return;
     setSending(true);
     try {
-      if (!(await ensureAccountUnlocked())) return;
+      if (canUnlock && !(await ensureAccountUnlocked(network))) return;
 
       let effectiveRecipient = recipient;
       if (recipientMode === 'name') {
-        const fresh = await resolveContact(recipientName.trim(), 'QORT');
+        const fresh = await resolveContact(
+          recipientName.trim(),
+          'QORT',
+          network
+        );
         setResolution(fresh);
         if (fresh.status !== 'resolved') return;
         if (fresh.address !== recipient) {
@@ -299,13 +331,14 @@ export function AssetDetail({ assetId }: Props) {
         effectiveRecipient = fresh.address;
       }
 
-      const res = await qdnRequest({
-        action: 'TRANSFER_ASSET',
+      const res = await requestAssetTransfer(
+        network,
         assetId,
-        recipient: effectiveRecipient,
-        amount,
-      } as any);
-      if (res?.accepted === false) throw new Error(res.error ?? 'TRANSFER_ASSET failed');
+        effectiveRecipient,
+        amount
+      );
+      if (res?.accepted === false)
+        throw new Error(res.error ?? 'TRANSFER_ASSET failed');
       setSendResult('success');
       setStaleAddressWarning(false);
 
@@ -338,11 +371,11 @@ export function AssetDetail({ assetId }: Props) {
   // Adapter satisfying TransactionRow's ChainConfig prop - only ticker and
   // decimalPlaces are actually read for asset rows.
   const chainAdapter: ChainConfig = {
-    key: `asset:${assetId}`,
+    key: `asset:${network}:${assetId}`,
     name: label,
     ticker: assetInfo?.name || `#${assetId}`,
     coinEnum: `ASSET_${assetId}`,
-    route: `asset/${assetId}`,
+    route: `asset/${network}/${assetId}`,
     defaultFee: 0,
     isNative: false,
     decimalPlaces: 8,
@@ -353,12 +386,15 @@ export function AssetDetail({ assetId }: Props) {
 
   if (notFound) {
     return (
-      <Box sx={{ minHeight: '100vh', bgcolor: isClassic ? c.frameBg : c.bg, p: 4 }}>
+      <Box
+        sx={{ minHeight: '100vh', bgcolor: isClassic ? c.frameBg : c.bg, p: 4 }}
+      >
         <IconButton onClick={() => navigate('/')} size="small" sx={{ mb: 2 }}>
           <ArrowBackIcon fontSize="small" />
         </IconButton>
         <Box sx={{ textAlign: 'center', color: c.textSecondary, py: 6 }}>
-          Asset #{assetId} was not found on this node.
+          {network === 'qortal' ? 'Qortal' : 'Qortium'} asset #{assetId} was not
+          found on this node.
         </Box>
       </Box>
     );
@@ -374,7 +410,9 @@ export function AssetDetail({ assetId }: Props) {
           zIndex: 90,
           bgcolor: c.surface,
           borderBottom: `${
-            isClassic ? tokens.shape.classicBorderWidth : tokens.shape.borderWidth
+            isClassic
+              ? tokens.shape.classicBorderWidth
+              : tokens.shape.borderWidth
           } solid ${isClassic ? c.border : c.borderLight}`,
           boxShadow: isClassic ? c.topBarShadow : 'none',
           display: 'flex',
@@ -422,7 +460,19 @@ export function AssetDetail({ assetId }: Props) {
         >
           {label}
         </Box>
-        <Tooltip title={isPinned ? 'Stop tracking this asset' : 'Track this asset'}>
+        <Box
+          sx={{
+            color: c.textSecondary,
+            fontSize: '0.65rem',
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+          }}
+        >
+          {network}
+        </Box>
+        <Tooltip
+          title={isPinned ? 'Stop tracking this asset' : 'Track this asset'}
+        >
           <IconButton size="small" onClick={togglePin} sx={{ color: c.accent }}>
             {isPinned ? (
               <BookmarkIcon fontSize="small" />
@@ -475,7 +525,9 @@ export function AssetDetail({ assetId }: Props) {
         <Box
           sx={{
             border: `${
-              isClassic ? tokens.shape.classicBorderWidth : tokens.shape.borderWidth
+              isClassic
+                ? tokens.shape.classicBorderWidth
+                : tokens.shape.borderWidth
             } solid ${isClassic ? c.border : c.borderLight}`,
             borderRadius: `${isClassic ? tokens.shape.radiusMd : tokens.shape.radius}px ${isClassic ? tokens.shape.radiusMd : tokens.shape.radius}px 0 0`,
             bgcolor: c.surface,
@@ -510,7 +562,9 @@ export function AssetDetail({ assetId }: Props) {
                   wordBreak: 'break-all',
                 }}
               >
-                {balance != null ? formatAssetBalance(balance, isDivisible) : '—'}
+                {balance != null
+                  ? formatAssetBalance(balance, isDivisible)
+                  : '—'}
                 <Box
                   component="span"
                   sx={{
@@ -536,7 +590,12 @@ export function AssetDetail({ assetId }: Props) {
                 display: 'flex',
               }}
             >
-              <QRCode value={address} size={120} bgColor="#ffffff" fgColor="#111111" />
+              <QRCode
+                value={address}
+                size={120}
+                bgColor="#ffffff"
+                fgColor="#111111"
+              />
             </Box>
           )}
         </Box>
@@ -546,7 +605,9 @@ export function AssetDetail({ assetId }: Props) {
           onClick={handleCopy}
           sx={{
             border: `${
-              isClassic ? tokens.shape.classicBorderWidth : tokens.shape.borderWidth
+              isClassic
+                ? tokens.shape.classicBorderWidth
+                : tokens.shape.borderWidth
             } solid ${isClassic ? c.border : c.borderLight}`,
             borderTop: 'none',
             borderRadius: `0 0 ${isClassic ? tokens.shape.radiusMd : tokens.shape.radius}px ${isClassic ? tokens.shape.radiusMd : tokens.shape.radius}px`,
@@ -610,7 +671,9 @@ export function AssetDetail({ assetId }: Props) {
         <Box
           sx={{
             border: `${
-              isClassic ? tokens.shape.classicBorderWidth : tokens.shape.borderWidth
+              isClassic
+                ? tokens.shape.classicBorderWidth
+                : tokens.shape.borderWidth
             } solid ${isClassic ? c.border : c.borderLight}`,
             borderRadius: `${isClassic ? tokens.shape.radiusMd : tokens.shape.radius}px`,
             bgcolor: c.surface,
@@ -627,13 +690,22 @@ export function AssetDetail({ assetId }: Props) {
           ) : (
             [
               { label: 'Asset ID', value: String(assetInfo.assetId) },
-              { label: 'Description', value: assetInfo.description || undefined },
+              {
+                label: 'Description',
+                value: assetInfo.description || undefined,
+              },
               { label: 'Owner', value: assetInfo.owner, mono: true },
               {
                 label: 'Total Supply',
-                value: formatAssetQuantity(assetInfo.quantity, assetInfo.isDivisible),
+                value: formatAssetQuantity(
+                  assetInfo.quantity,
+                  assetInfo.isDivisible
+                ),
               },
-              { label: 'Divisible', value: assetInfo.isDivisible ? 'Yes' : 'No' },
+              {
+                label: 'Divisible',
+                value: assetInfo.isDivisible ? 'Yes' : 'No',
+              },
               { label: 'Data', value: assetInfo.data || undefined, mono: true },
               {
                 label: 'Ownership',
@@ -694,7 +766,9 @@ export function AssetDetail({ assetId }: Props) {
         <Box
           sx={{
             border: `${
-              isClassic ? tokens.shape.classicBorderWidth : tokens.shape.borderWidth
+              isClassic
+                ? tokens.shape.classicBorderWidth
+                : tokens.shape.borderWidth
             } solid ${isClassic ? c.border : c.borderLight}`,
             borderRadius: `${isClassic ? tokens.shape.radiusMd : tokens.shape.radius}px`,
             overflow: 'hidden',
@@ -748,7 +822,9 @@ export function AssetDetail({ assetId }: Props) {
           sx: {
             maxWidth: isClassic ? c.layoutMaxWidth : undefined,
             border: `${
-              isClassic ? tokens.shape.classicBorderWidth : tokens.shape.borderWidth
+              isClassic
+                ? tokens.shape.classicBorderWidth
+                : tokens.shape.borderWidth
             } solid ${isClassic ? c.border : c.borderLight}`,
             borderRadius: isClassic ? `${tokens.shape.radiusMd}px` : 0,
             bgcolor: c.surface,
@@ -764,7 +840,9 @@ export function AssetDetail({ assetId }: Props) {
               px: 3,
               py: 2,
               borderBottom: `${
-                isClassic ? tokens.shape.classicBorderWidth : tokens.shape.borderWidth
+                isClassic
+                  ? tokens.shape.classicBorderWidth
+                  : tokens.shape.borderWidth
               } solid ${isClassic ? c.border : c.borderLight}`,
             }}
           >
@@ -779,12 +857,18 @@ export function AssetDetail({ assetId }: Props) {
             >
               Send {label}
             </Box>
-            <IconButton size="small" onClick={closeSend} sx={{ borderRadius: 0 }}>
+            <IconButton
+              size="small"
+              onClick={closeSend}
+              sx={{ borderRadius: 0 }}
+            >
               <CloseIcon fontSize="small" />
             </IconButton>
           </Box>
 
-          <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          <Box
+            sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2.5 }}
+          >
             {sendResult === 'success' ? (
               <Box sx={{ textAlign: 'center', py: 3 }}>
                 <CheckIcon sx={{ fontSize: 48, color: c.success, mb: 1 }} />
@@ -800,13 +884,25 @@ export function AssetDetail({ assetId }: Props) {
               </Box>
             ) : (
               <>
-                <Box sx={{ color: c.textSecondary, fontSize: '0.8rem', letterSpacing: '0.06em' }}>
+                <Box
+                  sx={{
+                    color: c.textSecondary,
+                    fontSize: '0.8rem',
+                    letterSpacing: '0.06em',
+                  }}
+                >
                   balance:{' '}
                   <Box
                     component="span"
-                    sx={{ color: c.textPrimary, fontWeight: tokens.typography.weightBold }}
+                    sx={{
+                      color: c.textPrimary,
+                      fontWeight: tokens.typography.weightBold,
+                    }}
                   >
-                    {balance != null ? formatAssetBalance(balance, isDivisible) : '—'} {label}
+                    {balance != null
+                      ? formatAssetBalance(balance, isDivisible)
+                      : '—'}{' '}
+                    {label}
                   </Box>
                 </Box>
 
@@ -833,12 +929,17 @@ export function AssetDetail({ assetId }: Props) {
                     sx={{
                       mt: '8px',
                       flexShrink: 0,
-                      borderRadius: isClassic ? `${tokens.shape.radiusMd}px` : '50px',
+                      borderRadius: isClassic
+                        ? `${tokens.shape.radiusMd}px`
+                        : '50px',
                       borderColor: c.accent,
                       color: c.accent,
                       fontSize: '0.7rem',
                       whiteSpace: 'nowrap',
-                      '&:hover': { borderColor: c.accentHover, color: c.accentHover },
+                      '&:hover': {
+                        borderColor: c.accentHover,
+                        color: c.accentHover,
+                      },
                     }}
                   >
                     Max
@@ -848,7 +949,9 @@ export function AssetDetail({ assetId }: Props) {
                 <Box sx={{ display: 'flex', gap: 1 }}>
                   <Button
                     size="small"
-                    variant={recipientMode === 'address' ? 'contained' : 'outlined'}
+                    variant={
+                      recipientMode === 'address' ? 'contained' : 'outlined'
+                    }
                     onClick={() => {
                       setRecipientMode('address');
                       setStaleAddressWarning(false);
@@ -859,7 +962,9 @@ export function AssetDetail({ assetId }: Props) {
                   </Button>
                   <Button
                     size="small"
-                    variant={recipientMode === 'name' ? 'contained' : 'outlined'}
+                    variant={
+                      recipientMode === 'name' ? 'contained' : 'outlined'
+                    }
                     onClick={() => {
                       setRecipientMode('name');
                       setStaleAddressWarning(false);
@@ -878,7 +983,9 @@ export function AssetDetail({ assetId }: Props) {
                     fullWidth
                     disabled={sending}
                     error={showRecipientError}
-                    helperText={showRecipientError ? 'Enter a valid recipient' : undefined}
+                    helperText={
+                      showRecipientError ? 'Enter a valid recipient' : undefined
+                    }
                   />
                 ) : (
                   <>
@@ -895,22 +1002,30 @@ export function AssetDetail({ assetId }: Props) {
                     {resolvingRecipient && (
                       <Typography variant="caption">Resolving…</Typography>
                     )}
-                    {!resolvingRecipient && resolution?.status === 'resolved' && (
-                      <Typography variant="caption" sx={{ color: c.success }}>
-                        Resolved to {resolution.address}
-                      </Typography>
-                    )}
-                    {!resolvingRecipient && resolution && resolution.status !== 'resolved' && (
-                      <Typography variant="caption" sx={{ color: c.error }}>
-                        {resolution.status === 'name-not-found' && 'Name not found'}
-                        {resolution.status === 'no-card' && 'No contact card published for this name'}
-                        {resolution.status === 'coin-not-published' && 'This name has not published a QORT address'}
-                        {resolution.status === 'fetch-failed' && 'Could not resolve name'}
-                      </Typography>
-                    )}
+                    {!resolvingRecipient &&
+                      resolution?.status === 'resolved' && (
+                        <Typography variant="caption" sx={{ color: c.success }}>
+                          Resolved to {resolution.address}
+                        </Typography>
+                      )}
+                    {!resolvingRecipient &&
+                      resolution &&
+                      resolution.status !== 'resolved' && (
+                        <Typography variant="caption" sx={{ color: c.error }}>
+                          {resolution.status === 'name-not-found' &&
+                            'Name not found'}
+                          {resolution.status === 'no-card' &&
+                            'No contact card published for this name'}
+                          {resolution.status === 'coin-not-published' &&
+                            'This name has not published a QORT address'}
+                          {resolution.status === 'fetch-failed' &&
+                            'Could not resolve name'}
+                        </Typography>
+                      )}
                     {staleAddressWarning && (
                       <Typography variant="caption" sx={{ color: c.warning }}>
-                        The resolved address changed - please confirm and send again.
+                        The resolved address changed - please confirm and send
+                        again.
                       </Typography>
                     )}
                   </>

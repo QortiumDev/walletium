@@ -3,7 +3,11 @@ import type { ReactNode } from 'react';
 import { Provider, createStore } from 'jotai';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { walletReadyAtom, pinnedAssetIdsAtom } from '../../state/global/system';
+import {
+  walletReadyAtom,
+  pinnedAssetIdsAtom,
+  pinnedQortalAssetIdsAtom,
+} from '../../state/global/system';
 import { useAssetHoldings } from '../useAssetHoldings';
 
 function wrapper(store: ReturnType<typeof createStore>) {
@@ -16,16 +20,70 @@ describe('useAssetHoldings', () => {
   let qdnRequestMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    delete (globalThis as any).qortalRequest;
     qdnRequestMock = vi.fn();
     (globalThis as any).qdnRequest = qdnRequestMock;
   });
 
+  it('loads Qortal assets separately and excludes native asset zero', async () => {
+    const qortalRequestMock = vi.fn(async (opts: Record<string, unknown>) => {
+      if (opts.action === 'GET_USER_ACCOUNT') {
+        return { address: 'QortalHolder' };
+      }
+      if (opts.action === 'GET_ASSET_BALANCES') {
+        return [
+          { address: 'QortalHolder', assetId: 0, balance: '10.00000000' },
+          { address: 'QortalHolder', assetId: 11, balance: '3.00000000' },
+        ];
+      }
+      if (opts.action === 'GET_ASSET_INFO') {
+        return {
+          assetId: 11,
+          owner: 'Qissuer',
+          name: 'QORTAL-SILVER',
+          quantity: '500000000',
+          isDivisible: true,
+          isUnspendable: false,
+          creationGroupId: 0,
+          isOwnerForSale: false,
+        };
+      }
+      throw new Error(`unexpected Qortal action: ${opts.action}`);
+    });
+    (globalThis as any).qortalRequest = qortalRequestMock;
+    qdnRequestMock.mockRejectedValue(new Error('Qortium unavailable'));
+
+    const store = createStore();
+    store.set(walletReadyAtom, true);
+
+    const { result } = renderHook(() => useAssetHoldings(), {
+      wrapper: wrapper(store),
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.assets).toEqual([
+      expect.objectContaining({
+        network: 'qortal',
+        assetId: 11,
+        name: 'QORTAL-SILVER',
+      }),
+    ]);
+    expect(store.get(pinnedQortalAssetIdsAtom)).toEqual([]);
+  });
+
   it('loads held assets via GET_ASSET_BALANCES and GET_ASSET_INFO, not FETCH_NODE_API', async () => {
     qdnRequestMock.mockImplementation((opts: Record<string, unknown>) => {
-      if (opts.action === 'GET_USER_WALLET') return Promise.resolve({ address: 'Qholder' });
+      if (opts.action === 'GET_USER_WALLET')
+        return Promise.resolve({ address: 'Qholder' });
       if (opts.action === 'GET_ASSET_BALANCES') {
-        expect(opts).toMatchObject({ address: 'Qholder', excludeZero: true, limit: 0 });
-        return Promise.resolve([{ address: 'Qholder', assetId: 7, balance: '250000000' }]);
+        expect(opts).toMatchObject({
+          address: 'Qholder',
+          excludeZero: true,
+          limit: 0,
+        });
+        return Promise.resolve([
+          { address: 'Qholder', assetId: 7, balance: '250000000' },
+        ]);
       }
       if (opts.action === 'GET_ASSET_INFO') {
         expect(opts).toMatchObject({ assetId: 7 });
@@ -46,18 +104,29 @@ describe('useAssetHoldings', () => {
     const store = createStore();
     store.set(walletReadyAtom, true);
 
-    const { result } = renderHook(() => useAssetHoldings(), { wrapper: wrapper(store) });
+    const { result } = renderHook(() => useAssetHoldings(), {
+      wrapper: wrapper(store),
+    });
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.assets).toHaveLength(1);
-    expect(result.current.assets[0]).toMatchObject({ assetId: 7, name: 'GOLD', balance: '250000000' });
-    expect(qdnRequestMock.mock.calls.some(([opts]) => opts.action === 'FETCH_NODE_API')).toBe(false);
+    expect(result.current.assets[0]).toMatchObject({
+      assetId: 7,
+      name: 'GOLD',
+      balance: '250000000',
+    });
+    expect(
+      qdnRequestMock.mock.calls.some(
+        ([opts]) => opts.action === 'FETCH_NODE_API'
+      )
+    ).toBe(false);
   });
 
   it('pinAsset resolves an assetName selector to the asset id before storing it', async () => {
     qdnRequestMock.mockImplementation((opts: Record<string, unknown>) => {
-      if (opts.action === 'GET_USER_WALLET') return Promise.resolve({ address: 'Qholder' });
+      if (opts.action === 'GET_USER_WALLET')
+        return Promise.resolve({ address: 'Qholder' });
       if (opts.action === 'GET_ASSET_BALANCES') return Promise.resolve([]);
       if (opts.action === 'GET_ASSET_INFO') {
         expect(opts).toMatchObject({ assetName: 'SILVER' });
@@ -78,12 +147,17 @@ describe('useAssetHoldings', () => {
     const store = createStore();
     store.set(walletReadyAtom, true);
 
-    const { result } = renderHook(() => useAssetHoldings(), { wrapper: wrapper(store) });
+    const { result } = renderHook(() => useAssetHoldings(), {
+      wrapper: wrapper(store),
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     let pinResult: { ok: boolean };
     await act(async () => {
-      pinResult = await result.current.pinAsset({ assetName: 'SILVER' });
+      pinResult = await result.current.pinAsset({
+        network: 'qortium',
+        assetName: 'SILVER',
+      });
     });
 
     expect(pinResult!.ok).toBe(true);
@@ -92,21 +166,28 @@ describe('useAssetHoldings', () => {
 
   it('pinAsset reports a clear error when the asset cannot be resolved', async () => {
     qdnRequestMock.mockImplementation((opts: Record<string, unknown>) => {
-      if (opts.action === 'GET_USER_WALLET') return Promise.resolve({ address: 'Qholder' });
+      if (opts.action === 'GET_USER_WALLET')
+        return Promise.resolve({ address: 'Qholder' });
       if (opts.action === 'GET_ASSET_BALANCES') return Promise.resolve([]);
-      if (opts.action === 'GET_ASSET_INFO') return Promise.reject(new Error('not found'));
+      if (opts.action === 'GET_ASSET_INFO')
+        return Promise.reject(new Error('not found'));
       throw new Error(`unexpected action: ${opts.action}`);
     });
 
     const store = createStore();
     store.set(walletReadyAtom, true);
 
-    const { result } = renderHook(() => useAssetHoldings(), { wrapper: wrapper(store) });
+    const { result } = renderHook(() => useAssetHoldings(), {
+      wrapper: wrapper(store),
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     let pinResult: { ok: boolean; error?: string };
     await act(async () => {
-      pinResult = await result.current.pinAsset({ assetId: 404 });
+      pinResult = await result.current.pinAsset({
+        network: 'qortium',
+        assetId: 404,
+      });
     });
 
     expect(pinResult!.ok).toBe(false);

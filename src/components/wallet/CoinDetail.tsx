@@ -64,6 +64,16 @@ import {
   TIME_SECONDS_3,
 } from '../../common/constants';
 import { TransactionRow, type TxRow } from './TransactionRow';
+import {
+  qortSendActionForActions,
+  requestQortActions,
+  requestQortBalance,
+  requestQortSend,
+  requestQortTransactions,
+  requestQortUnlock,
+  requestWalletForChain,
+  type QortSendAction,
+} from '../../common/walletBridge';
 
 interface Props {
   chain: ChainConfig;
@@ -79,17 +89,17 @@ const ARRR_INNER_MAX = 60;
 const ARRR_POLL_MS = 5000;
 const RECIPIENT_NAME_LOOKUP_DEBOUNCE_MS = 800;
 
-async function ensureAccountUnlocked(): Promise<boolean> {
-  const result = (await qdnRequest({
-    action: 'UNLOCK_SELECTED_ACCOUNT',
-  })) as { isUnlocked?: boolean } | null;
+async function ensureAccountUnlocked(
+  chain: ChainConfig,
+  qortCanUnlock: boolean
+): Promise<boolean> {
+  if (chain.isNative && !qortCanUnlock) return true;
+  const result = (await (chain.isNative
+    ? requestQortUnlock()
+    : qdnRequest({ action: 'UNLOCK_SELECTED_ACCOUNT' }))) as {
+    isUnlocked?: boolean;
+  } | null;
   return result?.isUnlocked === true;
-}
-
-function walletRequestForChain(chain: ChainConfig): QdnRequestOptions {
-  return chain.isNative
-    ? { action: 'GET_USER_WALLET', assetId: 0 }
-    : { action: 'GET_USER_WALLET', coin: chain.coinEnum };
 }
 
 export function CoinDetail({ chain }: Props) {
@@ -140,8 +150,13 @@ export function CoinDetail({ chain }: Props) {
   const [sendResponse, setSendResponse] = useState<SendCoinResult | null>(null);
 
   // SHOW_ACTIONS capability flags (updated on mount)
-  const [canSend, setCanSend] = useState(true);
+  const [canSend, setCanSend] = useState(false);
+  const [qortSendAction, setQortSendAction] = useState<QortSendAction | null>(
+    null
+  );
+  const [qortCanUnlock, setQortCanUnlock] = useState(false);
   const [walletAvailable, setWalletAvailable] = useState(true);
+  const [canManageForeignServer, setCanManageForeignServer] = useState(false);
 
   // ARRR initialization state
   const cancelSyncRef = useRef(false);
@@ -261,7 +276,7 @@ export function CoinDetail({ chain }: Props) {
 
   const fetchAddress = useCallback(async () => {
     try {
-      const res = await qdnRequest(walletRequestForChain(chain));
+      const res = await requestWalletForChain(chain);
       if (res?.address) setAddress(res.address);
     } catch {
       /* silent */
@@ -277,7 +292,7 @@ export function CoinDetail({ chain }: Props) {
       try {
         let result: string;
         if (chain.isNative) {
-          const res = await qdnRequest({ action: 'GET_QORT_BALANCE' });
+          const res = await requestQortBalance();
           result = String(parseFloat(String(res ?? 0)));
         } else {
           const res = await requestWithTimeout(
@@ -302,23 +317,43 @@ export function CoinDetail({ chain }: Props) {
 
   // Check which actions are available on the current node
   useEffect(() => {
+    if (chain.isNative) {
+      requestQortActions()
+        .then(({ actions, protocol }) => {
+          const action = qortSendActionForActions(actions);
+          setQortSendAction(action);
+          setQortCanUnlock(
+            protocol === 'qdnRequest' ||
+              actions.includes('UNLOCK_SELECTED_ACCOUNT')
+          );
+          setCanSend(action !== null);
+          setWalletAvailable(true);
+        })
+        .catch(() => {
+          setQortSendAction(null);
+          setQortCanUnlock(false);
+          setCanSend(false);
+        });
+      return;
+    }
+
     qdnRequest({ action: 'SHOW_ACTIONS' })
       .then((actions: unknown) => {
-        if (Array.isArray(actions)) {
-          setCanSend(
-            chain.isNative
-              ? actions.includes('SEND_QORT')
-              : actions.includes('SEND_COIN')
-          );
-          setWalletAvailable(
-            chain.isNative || actions.includes('GET_WALLET_BALANCE')
-          );
-        }
+        const advertised = Array.isArray(actions) ? actions : [];
+        const foreignWalletAvailable =
+          advertised.includes('GET_WALLET_BALANCE');
+        setCanSend(foreignWalletAvailable && advertised.includes('SEND_COIN'));
+        setWalletAvailable(foreignWalletAvailable);
+        setCanManageForeignServer(
+          advertised.includes('SET_CURRENT_FOREIGN_SERVER')
+        );
       })
       .catch(() => {
-        /* assume full access */
+        setCanSend(false);
+        setWalletAvailable(false);
+        setCanManageForeignServer(false);
       });
-  }, []);
+  }, [chain.isNative]);
 
   const openForeignServerDialog = useCallback(async () => {
     setForeignServers([]);
@@ -357,20 +392,14 @@ export function CoinDetail({ chain }: Props) {
     setLoadingTx(true);
     try {
       if (chain.isNative) {
-        const wallet = await qdnRequest(walletRequestForChain(chain));
+        const wallet = await requestWalletForChain(chain);
         const addr = wallet?.address;
         if (!addr) {
           setTransactions([]);
           return;
         }
-        // QORT history lives on the Qortal chain, so it must go through Home's
-        // Qortal search action, not FETCH_NODE_API (which targets the Qortium
-        // node). On Home builds without the action this throws and the catch
-        // below leaves the list empty, as before.
-        const res = await qdnRequest({
-          action: 'SEARCH_QORTAL_TRANSACTIONS',
-          txType: 'PAYMENT',
-          address: addr,
+        const res = await requestQortTransactions(addr, {
+          txType: ['PAYMENT'],
           confirmationStatus: 'CONFIRMED',
           limit: 20,
           reverse: true,
@@ -463,7 +492,11 @@ export function CoinDetail({ chain }: Props) {
     let cancelled = false;
     setResolvingRecipient(true);
     const timeout = setTimeout(async () => {
-      const result = await resolveContact(trimmed, chain.coinEnum);
+      const result = await resolveContact(
+        trimmed,
+        chain.coinEnum,
+        chain.isNative ? 'qortal' : 'qortium'
+      );
       if (cancelled) return;
       setResolution(result);
       setRecipient(
@@ -475,7 +508,7 @@ export function CoinDetail({ chain }: Props) {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [recipientName, recipientMode, chain.coinEnum]);
+  }, [recipientName, recipientMode, chain.coinEnum, chain.isNative]);
 
   const handleCopy = () => {
     if (!address) return;
@@ -490,13 +523,14 @@ export function CoinDetail({ chain }: Props) {
 
     setSending(true);
     try {
-      if (!(await ensureAccountUnlocked())) return;
+      if (!(await ensureAccountUnlocked(chain, qortCanUnlock))) return;
 
       let effectiveRecipient = recipient;
       if (recipientMode === 'name') {
         const fresh = await resolveContact(
           recipientName.trim(),
-          chain.coinEnum
+          chain.coinEnum,
+          chain.isNative ? 'qortal' : 'qortium'
         );
         setResolution(fresh);
         if (fresh.status !== 'resolved') return;
@@ -510,13 +544,14 @@ export function CoinDetail({ chain }: Props) {
 
       let result: SendCoinResult | null = null;
       if (chain.isNative) {
-        const res = await qdnRequest({
-          action: 'SEND_QORT',
-          recipient: effectiveRecipient,
-          amount: parseFloat(amount),
-        } as any);
+        if (!qortSendAction) return;
+        const res = await requestQortSend(
+          qortSendAction,
+          effectiveRecipient,
+          parseFloat(amount)
+        );
         if (res?.accepted === false)
-          throw new Error(res.error ?? 'SEND_QORT failed');
+          throw new Error(res.error ?? `${qortSendAction} failed`);
         result = res as any;
       } else {
         const payload: Record<string, unknown> = {
@@ -696,7 +731,7 @@ export function CoinDetail({ chain }: Props) {
           </Box>
         )}
         <Box sx={{ flexGrow: 1 }} />
-        {!chain.isNative && !isARRR && (
+        {!chain.isNative && !isARRR && canManageForeignServer && (
           <Tooltip title="ElectrumX servers">
             <IconButton
               size="small"
@@ -1404,7 +1439,11 @@ export function CoinDetail({ chain }: Props) {
                 ) : (
                   <>
                     <TextField
-                      label={t('send_dialog.recipient_name')}
+                      label={t(
+                        chain.isNative
+                          ? 'send_dialog.recipient_qortal_name'
+                          : 'send_dialog.recipient_name'
+                      )}
                       value={recipientName}
                       onChange={(e) => {
                         setRecipientName(e.target.value);
@@ -1433,7 +1472,10 @@ export function CoinDetail({ chain }: Props) {
                       resolution.status !== 'resolved' && (
                         <Typography variant="caption" sx={{ color: c.error }}>
                           {t(
-                            `send_dialog.resolution_${resolution.status.replace(/-/g, '_')}`,
+                            chain.isNative &&
+                              resolution.status === 'name-not-found'
+                              ? 'send_dialog.resolution_qortal_name_not_found'
+                              : `send_dialog.resolution_${resolution.status.replace(/-/g, '_')}`,
                             { name: resolution.name }
                           )}
                         </Typography>

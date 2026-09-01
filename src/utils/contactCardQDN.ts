@@ -1,5 +1,6 @@
 import { base64ToObject, objectToBase64 } from 'qapp-core';
 import type { ContactCardLocalState, ContactCardQDNData } from './Types';
+import { requestWalletForCoin } from '../common/walletBridge';
 
 const IDENTIFIER = 'walletium-contactcard';
 const SERVICE = 'JSON';
@@ -69,11 +70,9 @@ async function resolveAddressForCoin(
 ): Promise<string | null> {
   if (overrideAddress) return overrideAddress;
   try {
-    const res = (await qdnRequest(
-      coin === 'QORT'
-        ? { action: 'GET_USER_WALLET', assetId: 0 }
-        : { action: 'GET_USER_WALLET', coin }
-    )) as { address?: string } | null;
+    const res = (await requestWalletForCoin(coin)) as {
+      address?: string;
+    } | null;
     return res?.address ?? null;
   } catch {
     return null;
@@ -141,4 +140,3 @@ export async function publishContactCard(
     return null;
   }
 }
-

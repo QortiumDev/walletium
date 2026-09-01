@@ -69,6 +69,7 @@ interface QdnRequestOptions {
 }
 
 declare function qdnRequest(options: QdnRequestOptions): Promise<any>;
+declare function qortalRequest(options: QdnRequestOptions): Promise<any>;
 
 declare global {
   interface Window {

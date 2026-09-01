@@ -17,6 +17,7 @@ describe('fetchContactCard', () => {
 
   afterEach(() => {
     delete (global as any).qdnRequest;
+    delete (global as any).qortalRequest;
   });
 
   it('returns "found" with the decoded data when the resource exists', async () => {
@@ -126,6 +127,7 @@ describe('publishContactCard', () => {
 
   afterEach(() => {
     delete (global as any).qdnRequest;
+    delete (global as any).qortalRequest;
     vi.useRealTimers();
   });
 
@@ -150,6 +152,23 @@ describe('publishContactCard', () => {
     const publishCall = calls.find((c) => c.action === 'PUBLISH_QDN_RESOURCE')!;
     const publishedData = JSON.parse(publishCall.base64 as string);
     expect(publishedData.addresses).not.toHaveProperty('LTC');
+  });
+
+  it('resolves a published QORT address through qortalRequest', async () => {
+    const qortalMock = vi.fn(async () => ({ address: 'QortWalletAddress' }));
+    (global as any).qortalRequest = qortalMock;
+
+    const state: ContactCardLocalState = {
+      QORT: { decision: 'published' },
+    };
+    await publishContactCard(state, 'Alice');
+
+    const publishCall = calls.find((c) => c.action === 'PUBLISH_QDN_RESOURCE')!;
+    const publishedData = JSON.parse(publishCall.base64 as string);
+    expect(publishedData.addresses).toEqual({ QORT: 'QortWalletAddress' });
+    expect(qortalMock).toHaveBeenCalledWith({
+      action: 'GET_USER_ACCOUNT',
+    });
   });
 
   it('deletes the old resource before publishing the new one, in that order', async () => {

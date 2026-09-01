@@ -37,6 +37,7 @@ import { tokens } from '../../theme/tokens';
 import { useColors } from '../../theme/ColorTokensContext';
 import type { ChainConfig } from '../../config/chains';
 import type { AssetHolding } from '../../utils/Types';
+import type { AssetNetwork } from '../../utils/Types';
 import {
   sortModeAtom,
   customOrderAtom,
@@ -48,6 +49,13 @@ import {
   walletReadyAtom,
   viewModeAtom,
 } from '../../state/global/system';
+import {
+  qortSendActionForActions,
+  requestQortActions,
+  requestQortBalance,
+  requestWalletForChain,
+} from '../../common/walletBridge';
+import { requestAssetActions } from '../../common/assetBridge';
 
 type WalletItem =
   | { kind: 'chain'; key: string; chain: ChainConfig }
@@ -71,12 +79,6 @@ const TILE_MIN_PX: Record<number, number> = {
   8: 50,
   9: 38,
 };
-
-function walletRequestForChain(chain: ChainConfig): QdnRequestOptions {
-  return chain.isNative
-    ? { action: 'GET_USER_WALLET', assetId: 0 }
-    : { action: 'GET_USER_WALLET', coin: chain.coinEnum };
-}
 
 interface BlockProps {
   chain: ChainConfig;
@@ -113,7 +115,7 @@ function CoinBlock({
     setHovered(true);
     if (!fetchedRef.current) {
       fetchedRef.current = true;
-      qdnRequest(walletRequestForChain(chain))
+      requestWalletForChain(chain)
         .then((res: any) => {
           if (res?.address) setAddress(res.address);
         })
@@ -488,7 +490,7 @@ function SortableAssetItem({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: `asset:${asset.assetId}` });
+  } = useSortable({ id: `asset:${asset.network}:${asset.assetId}` });
 
   return (
     <Box
@@ -536,25 +538,59 @@ export function CoinGrid() {
   const prices = useMarketPrices();
   const [balances, setBalances] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
-  const [canSendNative, setCanSendNative] = useState(true);
-  const [canSendForeign, setCanSendForeign] = useState(true);
-  const [canSendAsset, setCanSendAsset] = useState(true);
+  const [canSendNative, setCanSendNative] = useState(false);
+  const [canSendForeign, setCanSendForeign] = useState(false);
+  const [canSendAssets, setCanSendAssets] = useState<
+    Record<AssetNetwork, boolean>
+  >({ qortium: false, qortal: false });
   const walletReady = useAtomValue(walletReadyAtom);
-  const { assets, loading: assetsLoading, pinAsset } = useAssetHoldings();
+  const {
+    assets,
+    loading: assetsLoading,
+    networks: assetNetworks,
+    pinAsset,
+  } = useAssetHoldings();
   const [addAssetOpen, setAddAssetOpen] = useState(false);
 
   useEffect(() => {
-    qdnRequest({ action: 'SHOW_ACTIONS' })
-      .then((actions: unknown) => {
-        if (Array.isArray(actions)) {
-          setCanSendNative(actions.includes('SEND_QORT'));
-          setCanSendForeign(actions.includes('SEND_COIN'));
-          setCanSendAsset(actions.includes('TRANSFER_ASSET'));
-        }
+    requestQortActions()
+      .then(({ actions }) => {
+        setCanSendNative(qortSendActionForActions(actions) !== null);
       })
-      .catch(() => {
-        /* assume full access */
-      });
+      .catch(() => setCanSendNative(false));
+
+    if (typeof qdnRequest === 'function') {
+      qdnRequest({ action: 'SHOW_ACTIONS' })
+        .then((actions: unknown) => {
+          if (Array.isArray(actions)) {
+            // Home 2 also uses SEND_COIN for its own Qortium native asset.
+            // Require the foreign read family so that action does not
+            // accidentally enable every foreign-chain send button.
+            setCanSendForeign(
+              actions.includes('SEND_COIN') &&
+                actions.includes('GET_WALLET_BALANCE')
+            );
+          }
+        })
+        .catch(() => {
+          setCanSendForeign(false);
+        });
+    }
+
+    assetNetworks.forEach((network) => {
+      requestAssetActions(network)
+        .then((actions) => {
+          setCanSendAssets((previous) => ({
+            ...previous,
+            [network]: actions.includes('TRANSFER_ASSET'),
+          }));
+        })
+        .catch(() => {
+          setCanSendAssets((previous) => ({ ...previous, [network]: false }));
+        });
+    });
+    // Bridge globals are fixed for the lifetime of the page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const setPortfolioFiat = useSetAtom(portfolioFiatAtom);
@@ -566,10 +602,14 @@ export function CoinGrid() {
 
   const items = useMemo<WalletItem[]>(
     () => [
-      ...chains.map((chain) => ({ kind: 'chain' as const, key: chain.key, chain })),
+      ...chains.map((chain) => ({
+        kind: 'chain' as const,
+        key: chain.key,
+        chain,
+      })),
       ...assets.map((asset) => ({
         kind: 'asset' as const,
-        key: `asset:${asset.assetId}`,
+        key: `asset:${asset.network}:${asset.assetId}`,
         asset,
       })),
     ],
@@ -731,7 +771,7 @@ export function CoinGrid() {
           try {
             let balance: string;
             if (chain.isNative) {
-              const res = await qdnRequest({ action: 'GET_QORT_BALANCE' });
+              const res = await requestQortBalance();
               balance = String(parseFloat(String(res ?? 0)));
             } else {
               const res = await requestWithTimeout(
@@ -810,7 +850,7 @@ export function CoinGrid() {
                 <SortableAssetItem
                   key={item.key}
                   asset={item.asset}
-                  canSend={canSendAsset}
+                  canSend={canSendAssets[item.asset.network]}
                   tileSize={tileSize}
                   isCustomMode={isCustom}
                   viewMode={viewMode}
@@ -829,6 +869,7 @@ export function CoinGrid() {
       <AddAssetDialog
         open={addAssetOpen}
         onClose={() => setAddAssetOpen(false)}
+        networks={assetNetworks}
         onSubmit={pinAsset}
       />
     </Box>

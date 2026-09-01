@@ -1,10 +1,5 @@
 import { useState } from 'react';
-import {
-  Box,
-  CircularProgress,
-  IconButton,
-  Tooltip,
-} from '@mui/material';
+import { Box, CircularProgress, IconButton, Tooltip } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -17,6 +12,7 @@ import { useColors } from '../../theme/ColorTokensContext';
 import { tokens } from '../../theme/tokens';
 import { formatAssetBalance } from '../../utils/assetAmount';
 import type { AssetHolding } from '../../utils/Types';
+import { requestAssetWallet } from '../../common/assetBridge';
 
 interface AssetListRowProps {
   asset: AssetHolding;
@@ -43,7 +39,7 @@ export function AssetListRow({
   const label = asset.name || `Asset #${asset.assetId}`;
 
   const openAsset = () => {
-    if (!isDragging) navigate(`/asset/${asset.assetId}`);
+    if (!isDragging) navigate(`/asset/${asset.network}/${asset.assetId}`);
   };
 
   const handleCopy = async (event: React.MouseEvent) => {
@@ -54,10 +50,7 @@ export function AssetListRow({
     try {
       let walletAddress = address;
       if (!walletAddress) {
-        const response = await qdnRequest({
-          action: 'GET_USER_WALLET',
-          assetId: 0,
-        });
+        const response = await requestAssetWallet(asset.network);
         walletAddress = response?.address ?? null;
         if (walletAddress) setAddress(walletAddress);
       }
@@ -75,7 +68,7 @@ export function AssetListRow({
 
   const handleSend = (event: React.MouseEvent) => {
     event.stopPropagation();
-    navigate(`/asset/${asset.assetId}?send=true`);
+    navigate(`/asset/${asset.network}/${asset.assetId}?send=true`);
   };
 
   const actionButtonSx = {
@@ -88,7 +81,7 @@ export function AssetListRow({
 
   return (
     <Box
-      data-testid={`asset-list-row-${asset.assetId}`}
+      data-testid={`asset-list-row-${asset.network}-${asset.assetId}`}
       onClick={openAsset}
       sx={{
         display: 'flex',
@@ -172,7 +165,7 @@ export function AssetListRow({
             mt: 0.25,
           }}
         >
-          ASSET #{asset.assetId}
+          {asset.network.toUpperCase()} ASSET #{asset.assetId}
         </Box>
       </Box>
 

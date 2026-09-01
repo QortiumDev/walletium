@@ -1,4 +1,5 @@
 import { fetchContactCard } from './contactCardQDN';
+import { requestQortNameData } from '../common/walletBridge';
 
 export type ContactResolution =
   | { status: 'resolved'; address: string; coin: string; name: string }
@@ -9,9 +10,24 @@ export type ContactResolution =
 
 export async function resolveContact(
   name: string,
-  coin: string
+  coin: string,
+  network: 'qortium' | 'qortal' = 'qortium'
 ): Promise<ContactResolution> {
   const trimmedName = name.trim();
+
+  if (coin === 'QORT' && network === 'qortal') {
+    const nameData = (await requestQortNameData(trimmedName).catch(
+      () => null
+    )) as { owner?: string } | null;
+    return nameData?.owner
+      ? {
+          status: 'resolved',
+          address: nameData.owner,
+          coin,
+          name: trimmedName,
+        }
+      : { status: 'name-not-found', name: trimmedName };
+  }
 
   const [nameData, cardResult] = await Promise.all([
     qdnRequest({ action: 'GET_NAME_DATA', name: trimmedName }).catch(

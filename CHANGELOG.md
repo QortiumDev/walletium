@@ -6,7 +6,17 @@ All notable changes to Qortium Wallet will be documented in this file.
 
 ### Fixed
 
-- QORT transaction history now loads. It was empty for two reasons: the history query used `FETCH_NODE_API`, which targets the Qortium node instead of the Qortal chain the QORT payments live on, and the bridge's result envelope was never unwrapped (the transaction array is in `.data`). The query now uses Home's new `SEARCH_QORTAL_TRANSACTIONS` action, which searches the Qortal chain and returns the transaction array directly; on Home builds without that action the list stays empty as before.
+- Assets are now keyed by chain as well as asset ID. Qortium assets continue to use `qdnRequest`, while Qortal assets use `qortalRequest`; balances, metadata, transfers, receive addresses, pins, routes, and sends stay on the selected chain even when the same asset ID exists on both.
+- A Wallet build published to Qortal QDN can read Qortal asset data through public same-origin Core endpoints when its host lacks the newer structured read actions, while transfer requests remain single-shot `TRANSFER_ASSET` bridge calls. In Qortium Home, Qortal asset support remains fail-closed until Home advertises the matching Qortal asset actions.
+- Native asset ID `0` is excluded from the generic asset list so QORT and any future Qortium native coin are not duplicated as ordinary assets.
+- Foreign send and ElectrumX server controls are now gated by their complete advertised Home actions, so Home 2's Qortium-native `SEND_COIN` action cannot incorrectly enable every foreign chain while the foreign-wallet family is unavailable.
+- Refreshed the lockfile to patched DOMPurify and React Router releases after the production dependency audit began flagging their superseded versions.
+- QORT address, balance, history, name lookup, account unlock, and send operations now prefer the `qortalRequest` bridge. This keeps QORT on the Qortal chain in Qortium Home 2 and allows the same Wallet build to run from Qortal QDN. Qortium assets and foreign wallets remain on `qdnRequest`.
+- QORT addresses now use Qortal's standard `GET_USER_ACCOUNT`, balances use `GET_BALANCE` with that address, and history uses `SEARCH_TRANSACTIONS`, rather than the Home 1.x-only `GET_QORT_BALANCE` and `SEARCH_QORTAL_TRANSACTIONS` QDN aliases. Those aliases remain as a compatibility fallback only when a host does not expose `qortalRequest`.
+- QORT sending selects Home 2's advertised `SEND_QORT` action or Qortal Core's standard `SEND_COIN` contract before approval and makes exactly one send request, avoiding unsafe retry-based protocol detection. The Wallet only invokes Home's explicit account-unlock action when the host advertises it; standard Qortal hosts use their own send approval flow.
+- QORT name recipients now resolve directly against Qortal names instead of requiring a Qortium contact card. Qortium asset and foreign-coin recipient resolution remains on Qortium.
+- QORT payment-notification rules now watch the address returned by the Qortal wallet bridge instead of the Qortium selected-account address.
+- Qortal-only hosts no longer populate unsupported Qortium foreign-chain fallback rows when `qdnRequest` is unavailable.
 
 ## [1.7.9] - 2026-07-10
 

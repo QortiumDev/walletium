@@ -103,10 +103,15 @@ export interface AssetBalanceData {
 // GET_ASSET_INFO takes (assetId wins if both are given).
 export type AssetSelector = { assetId: number } | { assetName: string };
 
+export type AssetNetwork = 'qortium' | 'qortal';
+
+export type NetworkAssetSelector = AssetSelector & { network: AssetNetwork };
+
 // A holding shown in the wallet: asset metadata plus this account's balance,
 // merged from AssetData + AssetBalanceData (or a zero balance for pinned
 // assets the account doesn't currently hold).
 export interface AssetHolding {
+  network: AssetNetwork;
   assetId: number;
   name: string;
   description?: string;
