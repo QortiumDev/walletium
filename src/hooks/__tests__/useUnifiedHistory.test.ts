@@ -3,6 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import { useUnifiedHistory } from '../useUnifiedHistory';
 import type { ChainConfig } from '../../config/chains';
+import { HOME_WALLET_CONTRACT } from '../../common/homeWalletCapabilities';
 
 const QORT_CHAIN: ChainConfig = {
   key: 'QORT',
@@ -30,6 +31,16 @@ const LTC_CHAIN: ChainConfig = {
   activeNetwork: 'MAIN',
   supportsHtlc: true,
   supportsLocalChainTrades: true,
+  homeWallet: {
+    contract: HOME_WALLET_CONTRACT,
+    implemented: true,
+    protocol: 'qdnRequest',
+    read: true,
+    receive: true,
+    requiresUnlockedAccount: true,
+    send: true,
+    sendMode: 'TRUSTED_CORE',
+  },
 };
 
 beforeEach(() => {
@@ -43,7 +54,7 @@ afterEach(() => {
 });
 
 describe('useUnifiedHistory', () => {
-  it('returns empty rows and both chains loading initially', () => {
+  it('does not mark a foreign chain as loading before its actions are advertised', () => {
     (globalThis as any).qdnRequest.mockResolvedValue([]);
     (globalThis as any).qortalRequest.mockResolvedValue([]);
     const { result } = renderHook(() =>
@@ -51,7 +62,7 @@ describe('useUnifiedHistory', () => {
     );
     expect(result.current.rows).toEqual([]);
     expect(result.current.loadingChains).toContain('QORT');
-    expect(result.current.loadingChains).toContain('LTC');
+    expect(result.current.loadingChains).not.toContain('LTC');
   });
 
   it('populates rows after both chains resolve and sorts by timestamp descending', async () => {
@@ -72,6 +83,8 @@ describe('useUnifiedHistory', () => {
       return Promise.resolve(null);
     });
     (globalThis as any).qdnRequest.mockImplementation((opts: any) => {
+      if (opts.action === 'SHOW_ACTIONS')
+        return Promise.resolve(['GET_USER_WALLET_TRANSACTIONS']);
       if (opts.action === 'GET_USER_WALLET_TRANSACTIONS')
         return Promise.resolve([
           { txHash: 'hash2', totalAmount: 500000000, timestamp: 1000 },
@@ -99,10 +112,14 @@ describe('useUnifiedHistory', () => {
   });
 
   it('places errored chains in errorChains and removes from loadingChains', async () => {
-    (globalThis as any).qdnRequest.mockRejectedValue(new Error('fail'));
+    (globalThis as any).qdnRequest.mockImplementation((opts: any) => {
+      if (opts.action === 'SHOW_ACTIONS')
+        return Promise.resolve(['GET_USER_WALLET_TRANSACTIONS']);
+      return Promise.reject(new Error('fail'));
+    });
     const { result } = renderHook(() => useUnifiedHistory([LTC_CHAIN]));
-    await waitFor(() => expect(result.current.loadingChains).toHaveLength(0));
-    expect(result.current.errorChains).toContain('LTC');
+    await waitFor(() => expect(result.current.errorChains).toContain('LTC'));
+    expect(result.current.loadingChains).toHaveLength(0);
   });
 
   it('excludes ARRR from loadingChains', () => {

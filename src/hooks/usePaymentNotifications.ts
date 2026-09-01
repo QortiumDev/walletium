@@ -16,6 +16,7 @@ import {
   paymentNotificationErrorMessage,
   registerPaymentNotifications,
 } from '../notifications/paymentNotificationRegistration';
+import { foreignWalletAvailability } from '../common/homeWalletCapabilities';
 
 // Registers background payment notifications (own QORT address + foreign coin
 // xpubs) with Home's notification bridge. ARRR is excluded here - the Core watcher
@@ -36,12 +37,49 @@ export function usePaymentNotifications() {
   const { chains } = useSupportedChains();
   const disabledCleanupAttempted = useRef(false);
   const [accountRevision, setAccountRevision] = useState(0);
+  const [foreignActions, setForeignActions] = useState<string[] | null>(null);
 
   useEffect(() => {
     supportsNotifications()
       .then(setSupported)
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (typeof qdnRequest !== 'function') {
+      setForeignActions([]);
+      return;
+    }
+
+    let cancelled = false;
+    let revision = 0;
+    const refresh = () => {
+      const requestRevision = ++revision;
+      qdnRequest({ action: 'SHOW_ACTIONS' })
+        .then((actions: unknown) => {
+          if (!cancelled && requestRevision === revision)
+            setForeignActions(Array.isArray(actions) ? actions : []);
+        })
+        .catch(() => {
+          if (!cancelled && requestRevision === revision) setForeignActions([]);
+        });
+    };
+    const handleBridgeChange = () => {
+      setForeignActions(null);
+      refresh();
+    };
+
+    refresh();
+    window.addEventListener('qortiumBridgeStateChanged', handleBridgeChange);
+    return () => {
+      cancelled = true;
+      revision++;
+      window.removeEventListener(
+        'qortiumBridgeStateChanged',
+        handleBridgeChange
+      );
+    };
   }, []);
 
   useEffect(() => {
@@ -94,11 +132,16 @@ export function usePaymentNotifications() {
       };
     }
 
-    if (!walletReady) return;
+    if (!walletReady || foreignActions === null) return;
 
     disabledCleanupAttempted.current = false;
     const foreignCoins = chains
-      .filter((chain) => !chain.isNative && chain.key !== 'ARRR')
+      .filter(
+        (chain) =>
+          !chain.isNative &&
+          chain.key !== 'ARRR' &&
+          foreignWalletAvailability(chain, foreignActions).canReceive
+      )
       .map((chain) => chain.coinEnum);
 
     setRegistrationError(null);
@@ -123,6 +166,7 @@ export function usePaymentNotifications() {
     accountRevision,
     chains,
     enabled,
+    foreignActions,
     registrationError,
     setEnabled,
     setRegistrationError,

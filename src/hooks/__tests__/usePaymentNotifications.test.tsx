@@ -1,6 +1,6 @@
 import { Provider, createStore } from 'jotai';
 import { act, render, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   notificationsEnabledAtom,
   paymentNotificationRegistrationErrorAtom,
@@ -15,6 +15,26 @@ const mocks = vi.hoisted(() => ({
   supportsNotifications: vi.fn(),
 }));
 
+const supportedChains = [
+  { key: 'QORT', coinEnum: 'QORT', isNative: true },
+  {
+    key: 'BTC',
+    coinEnum: 'BTC',
+    isNative: false,
+    homeWallet: {
+      contract: 'qortium-home-wallet-v1',
+      implemented: true,
+      protocol: 'qdnRequest',
+      read: true,
+      receive: true,
+      requiresUnlockedAccount: true,
+      send: true,
+      sendMode: 'TRUSTED_CORE',
+    },
+  },
+  { key: 'ARRR', coinEnum: 'ARRR', isNative: false },
+];
+
 vi.mock('../../notifications/notificationsApi', () => ({
   removeNotificationRules: mocks.removeNotificationRules,
   supportsNotifications: mocks.supportsNotifications,
@@ -28,11 +48,7 @@ vi.mock('../../notifications/paymentNotificationRegistration', () => ({
 
 vi.mock('../useSupportedChains', () => ({
   useSupportedChains: () => ({
-    chains: [
-      { key: 'QORT', coinEnum: 'QORT', isNative: true },
-      { key: 'BTC', coinEnum: 'BTC', isNative: false },
-      { key: 'ARRR', coinEnum: 'ARRR', isNative: false },
-    ],
+    chains: supportedChains,
     status: 'live',
   }),
 }));
@@ -47,6 +63,13 @@ describe('usePaymentNotifications', () => {
     mocks.registerPaymentNotifications.mockReset();
     mocks.removeNotificationRules.mockReset().mockResolvedValue(undefined);
     mocks.supportsNotifications.mockReset().mockResolvedValue(true);
+    (globalThis as any).qdnRequest = vi.fn(async (options: any) =>
+      options.action === 'SHOW_ACTIONS' ? ['GET_USER_WALLET'] : null
+    );
+  });
+
+  afterEach(() => {
+    delete (globalThis as any).qdnRequest;
   });
 
   it('registers through the selected-account flow when the bell is enabled', async () => {

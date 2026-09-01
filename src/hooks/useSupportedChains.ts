@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   DEFAULT_CHAINS,
   KNOWN_CHAIN_MAP,
   QORT_CHAIN,
   type ChainConfig,
+  type HomeWalletCapability,
 } from '../config/chains';
 
-const SESSION_KEY = 'qortium_supported_chains';
-const SESSION_STATUS_KEY = 'qortium_chain_status';
+const SESSION_KEY = 'qortium_supported_chains_v2';
+const SESSION_STATUS_KEY = 'qortium_chain_status_v2';
 
 export type ChainDiscoveryStatus = 'pending' | 'live' | 'fallback';
 
@@ -18,6 +19,7 @@ interface SupportedBlockchainInfo {
   activeNetwork: string;
   supportsHtlc: boolean;
   supportsLocalChainTrades: boolean;
+  homeWallet?: HomeWalletCapability;
 }
 
 export function useSupportedChains(): {
@@ -32,7 +34,7 @@ export function useSupportedChains(): {
       try {
         const parsed = JSON.parse(cached) as ChainConfig[];
         const supported = parsed
-          .map((chain) => {
+          .map((chain): ChainConfig | undefined => {
             const known = KNOWN_CHAIN_MAP.get(chain.key);
             if (!known) return undefined;
             return {
@@ -43,6 +45,9 @@ export function useSupportedChains(): {
               supportsLocalChainTrades:
                 chain.supportsLocalChainTrades ??
                 known.supportsLocalChainTrades,
+              // Cached discovery data is display-only. Wallet authority must
+              // be re-established by the current Home instance.
+              homeWallet: undefined,
             };
           })
           .filter((chain): chain is ChainConfig => chain !== undefined);
@@ -54,17 +59,15 @@ export function useSupportedChains(): {
     }
     return [QORT_CHAIN];
   });
-  const [status, setStatus] = useState<ChainDiscoveryStatus>(() => {
-    const s = sessionStorage.getItem(SESSION_STATUS_KEY);
-    return (s as ChainDiscoveryStatus) ?? 'pending';
-  });
+  const [status, setStatus] = useState<ChainDiscoveryStatus>('pending');
+  const discoveryRevision = useRef(0);
 
   useEffect(() => {
-    // If we already seeded from cache, skip the network call for this session.
-    if (sessionStorage.getItem(SESSION_KEY)) return;
-
+    let cancelled = false;
     async function discover() {
+      const revision = ++discoveryRevision.current;
       if (typeof qdnRequest !== 'function') {
+        if (cancelled || revision !== discoveryRevision.current) return;
         setChains([QORT_CHAIN]);
         setStatus('fallback');
         return;
@@ -81,7 +84,7 @@ export function useSupportedChains(): {
             (info) =>
               info.walletEnabled && info.currencyCode?.toUpperCase() !== 'QORT'
           )
-          .map((info) => {
+          .map((info): ChainConfig | undefined => {
             const code = info.currencyCode?.toUpperCase();
             const known = KNOWN_CHAIN_MAP.get(code);
             if (!known) {
@@ -97,14 +100,17 @@ export function useSupportedChains(): {
                 (info.activeNetwork as ChainConfig['activeNetwork']) ?? 'MAIN',
               supportsHtlc: info.supportsHtlc,
               supportsLocalChainTrades: info.supportsLocalChainTrades,
+              homeWallet: info.homeWallet,
             };
           })
           .filter((c): c is ChainConfig => c !== undefined);
+        if (cancelled || revision !== discoveryRevision.current) return;
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(merged));
         sessionStorage.setItem(SESSION_STATUS_KEY, 'live');
         setChains([QORT_CHAIN, ...merged]);
         setStatus('live');
       } catch (err) {
+        if (cancelled || revision !== discoveryRevision.current) return;
         console.warn(
           '[Walletium] GET_CROSSCHAIN_BLOCKCHAINS unavailable:',
           err
@@ -115,6 +121,22 @@ export function useSupportedChains(): {
     }
 
     discover();
+    const refresh = () => {
+      // Revoke cached live authority immediately while the current Home
+      // instance is rediscovered.
+      setChains((current) =>
+        current.map((chain) =>
+          chain.isNative ? chain : { ...chain, homeWallet: undefined }
+        )
+      );
+      setStatus('pending');
+      discover();
+    };
+    window.addEventListener('qortiumBridgeStateChanged', refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('qortiumBridgeStateChanged', refresh);
+    };
   }, []);
 
   return { chains, status };
