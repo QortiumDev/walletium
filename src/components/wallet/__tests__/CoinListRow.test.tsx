@@ -24,6 +24,20 @@ const btcChain: ChainConfig = {
   supportsLocalChainTrades: true,
 };
 
+const qortChain: ChainConfig = {
+  key: 'QORT',
+  name: 'Qortal',
+  ticker: 'QORT',
+  coinEnum: 'QORT',
+  route: 'qort',
+  defaultFee: 0.001,
+  isNative: true,
+  decimalPlaces: 8,
+  activeNetwork: 'MAIN',
+  supportsHtlc: false,
+  supportsLocalChainTrades: false,
+};
+
 const writeTextMock = vi.fn();
 
 function LocationProbe() {
@@ -58,6 +72,9 @@ describe('CoinListRow', () => {
   beforeEach(() => {
     (globalThis as any).qdnRequest = vi.fn(async () => ({
       address: 'btc-wallet-address',
+    }));
+    (globalThis as any).qortalRequest = vi.fn(async () => ({
+      address: 'qort-wallet-address',
     }));
     writeTextMock.mockReset();
     writeTextMock.mockResolvedValue(undefined);
@@ -98,6 +115,25 @@ describe('CoinListRow', () => {
       action: 'GET_USER_WALLET',
       coin: 'BTC',
     });
+  });
+
+  it('fetches QORT addresses through qortalRequest', async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: writeTextMock },
+      configurable: true,
+    });
+    renderRow({ chain: qortChain, fiatDisplay: undefined });
+
+    await user.click(screen.getByRole('button', { name: 'copy QORT address' }));
+
+    await waitFor(() =>
+      expect(writeTextMock).toHaveBeenCalledWith('qort-wallet-address')
+    );
+    expect(globalThis.qortalRequest).toHaveBeenCalledWith({
+      action: 'GET_USER_ACCOUNT',
+    });
+    expect(globalThis.qdnRequest).not.toHaveBeenCalled();
   });
 
   it('opens the detail and send routes from always-visible actions', async () => {

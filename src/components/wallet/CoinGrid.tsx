@@ -48,6 +48,12 @@ import {
   walletReadyAtom,
   viewModeAtom,
 } from '../../state/global/system';
+import {
+  qortSendActionForActions,
+  requestQortActions,
+  requestQortBalance,
+  requestWalletForChain,
+} from '../../common/walletBridge';
 
 type WalletItem =
   | { kind: 'chain'; key: string; chain: ChainConfig }
@@ -71,12 +77,6 @@ const TILE_MIN_PX: Record<number, number> = {
   8: 50,
   9: 38,
 };
-
-function walletRequestForChain(chain: ChainConfig): QdnRequestOptions {
-  return chain.isNative
-    ? { action: 'GET_USER_WALLET', assetId: 0 }
-    : { action: 'GET_USER_WALLET', coin: chain.coinEnum };
-}
 
 interface BlockProps {
   chain: ChainConfig;
@@ -113,7 +113,7 @@ function CoinBlock({
     setHovered(true);
     if (!fetchedRef.current) {
       fetchedRef.current = true;
-      qdnRequest(walletRequestForChain(chain))
+      requestWalletForChain(chain)
         .then((res: any) => {
           if (res?.address) setAddress(res.address);
         })
@@ -536,25 +536,33 @@ export function CoinGrid() {
   const prices = useMarketPrices();
   const [balances, setBalances] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
-  const [canSendNative, setCanSendNative] = useState(true);
-  const [canSendForeign, setCanSendForeign] = useState(true);
-  const [canSendAsset, setCanSendAsset] = useState(true);
+  const [canSendNative, setCanSendNative] = useState(false);
+  const [canSendForeign, setCanSendForeign] = useState(false);
+  const [canSendAsset, setCanSendAsset] = useState(false);
   const walletReady = useAtomValue(walletReadyAtom);
   const { assets, loading: assetsLoading, pinAsset } = useAssetHoldings();
   const [addAssetOpen, setAddAssetOpen] = useState(false);
 
   useEffect(() => {
-    qdnRequest({ action: 'SHOW_ACTIONS' })
-      .then((actions: unknown) => {
-        if (Array.isArray(actions)) {
-          setCanSendNative(actions.includes('SEND_QORT'));
-          setCanSendForeign(actions.includes('SEND_COIN'));
-          setCanSendAsset(actions.includes('TRANSFER_ASSET'));
-        }
+    requestQortActions()
+      .then(({ actions }) => {
+        setCanSendNative(qortSendActionForActions(actions) !== null);
       })
-      .catch(() => {
-        /* assume full access */
-      });
+      .catch(() => setCanSendNative(false));
+
+    if (typeof qdnRequest === 'function') {
+      qdnRequest({ action: 'SHOW_ACTIONS' })
+        .then((actions: unknown) => {
+          if (Array.isArray(actions)) {
+            setCanSendForeign(actions.includes('SEND_COIN'));
+            setCanSendAsset(actions.includes('TRANSFER_ASSET'));
+          }
+        })
+        .catch(() => {
+          setCanSendForeign(false);
+          setCanSendAsset(false);
+        });
+    }
   }, []);
 
   const setPortfolioFiat = useSetAtom(portfolioFiatAtom);
@@ -566,7 +574,11 @@ export function CoinGrid() {
 
   const items = useMemo<WalletItem[]>(
     () => [
-      ...chains.map((chain) => ({ kind: 'chain' as const, key: chain.key, chain })),
+      ...chains.map((chain) => ({
+        kind: 'chain' as const,
+        key: chain.key,
+        chain,
+      })),
       ...assets.map((asset) => ({
         kind: 'asset' as const,
         key: `asset:${asset.assetId}`,
@@ -731,7 +743,7 @@ export function CoinGrid() {
           try {
             let balance: string;
             if (chain.isNative) {
-              const res = await qdnRequest({ action: 'GET_QORT_BALANCE' });
+              const res = await requestQortBalance();
               balance = String(parseFloat(String(res ?? 0)));
             } else {
               const res = await requestWithTimeout(

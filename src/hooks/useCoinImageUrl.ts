@@ -5,6 +5,10 @@ const fetchOnce = new Map<string, Promise<string | null>>();
 
 function getUrl(key: string): Promise<string | null> {
   if (!fetchOnce.has(key)) {
+    if (typeof qdnRequest !== 'function') {
+      urlCache.set(key, null);
+      return Promise.resolve(null);
+    }
     const p = qdnRequest({
       action: 'GET_QDN_RESOURCE_URL',
       service: 'THUMBNAIL',

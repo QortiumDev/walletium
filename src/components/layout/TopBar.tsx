@@ -54,6 +54,7 @@ import { useMarketPrices } from '../../hooks/useMarketPrices';
 import { RatingControl } from './RatingControl';
 import { AppIcon, getOwnQdnName } from './AppIdentity';
 import { PriceTicker } from './PriceTicker';
+import { requestWalletForChain } from '../../common/walletBridge';
 
 const APP_QDN_NAME = getOwnQdnName('Wallet');
 const APP_QDN_IDENTIFIER = 'Wallet';
@@ -124,7 +125,8 @@ export function TopBar() {
           listName: 'followedQdn',
         });
         setIsFollowed(
-          Array.isArray(list) && (list as string[]).includes(`*/${APP_QDN_NAME}`)
+          Array.isArray(list) &&
+            (list as string[]).includes(`*/${APP_QDN_NAME}`)
         );
       } catch {
         // Follow-list state is optional chrome; ignore unavailable list APIs.
@@ -212,11 +214,7 @@ export function TopBar() {
       const lines = await Promise.all(
         chains.map(async (chain) => {
           try {
-            const res = await qdnRequest(
-              chain.isNative
-                ? { action: 'GET_USER_WALLET', assetId: 0 }
-                : { action: 'GET_USER_WALLET', coin: chain.coinEnum }
-            );
+            const res = await requestWalletForChain(chain);
             return res?.address ? `${chain.ticker} - ${res.address}` : null;
           } catch {
             return null;

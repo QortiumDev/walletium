@@ -21,15 +21,30 @@ const BTC_CHAIN: ChainConfig = {
   supportsLocalChainTrades: true,
 };
 
+const QORT_CHAIN: ChainConfig = {
+  key: 'QORT',
+  name: 'Qortal',
+  ticker: 'QORT',
+  coinEnum: 'QORT',
+  route: 'qort',
+  defaultFee: 0.001,
+  isNative: true,
+  decimalPlaces: 8,
+  activeNetwork: 'MAIN',
+  supportsHtlc: false,
+  supportsLocalChainTrades: false,
+};
+
 function renderRow(
   state: ContactCardCoinState = { decision: 'undecided' },
   onDecisionChange = vi.fn(),
-  onOverrideChange = vi.fn()
+  onOverrideChange = vi.fn(),
+  chain = BTC_CHAIN
 ) {
   render(
     <ThemeProviderWrapper>
       <ContactCardCoinRow
-        chain={BTC_CHAIN}
+        chain={chain}
         state={state}
         onDecisionChange={onDecisionChange}
         onOverrideChange={onOverrideChange}
@@ -45,15 +60,33 @@ describe('ContactCardCoinRow', () => {
     (globalThis as any).qdnRequest = vi.fn(async () => ({
       address: 'bc1qmywalletaddress',
     }));
+    (globalThis as any).qortalRequest = vi.fn(async () => ({
+      address: 'QortWalletAddress',
+    }));
   });
 
   afterEach(() => {
     delete (globalThis as any).qdnRequest;
+    delete (globalThis as any).qortalRequest;
   });
 
   it('fetches and displays the wallet address for the coin', async () => {
     renderRow();
     expect(await screen.findByText('bc1qmywalletaddress')).toBeInTheDocument();
+  });
+
+  it('fetches the QORT address through qortalRequest', async () => {
+    renderRow({ decision: 'published' }, vi.fn(), vi.fn(), QORT_CHAIN);
+
+    expect(await screen.findByText('QortWalletAddress')).toBeInTheDocument();
+    expect(globalThis.qortalRequest).toHaveBeenCalledWith({
+      action: 'GET_USER_ACCOUNT',
+    });
+    expect(
+      (globalThis.qdnRequest as ReturnType<typeof vi.fn>).mock.calls.some(
+        ([request]) => request.action === 'GET_USER_WALLET'
+      )
+    ).toBe(false);
   });
 
   it('shows the switch off by default for an undecided coin', () => {

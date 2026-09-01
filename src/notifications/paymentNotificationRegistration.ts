@@ -10,11 +10,13 @@ import {
   paymentNotificationSignature,
   type ForeignWalletXpub,
 } from './paymentNotificationRules';
+import { requestQortWallet } from '../common/walletBridge';
 
 type Request = (options: QdnRequestOptions) => Promise<unknown>;
 
 export type PaymentNotificationRegistrationDependencies = {
   request: Request;
+  requestQortWallet: () => Promise<unknown>;
   getRules: () => Promise<NotificationRule[]>;
   addRules: (rules: NotificationRule[]) => Promise<void>;
   removeRules: (notificationIds?: string[]) => Promise<void>;
@@ -24,6 +26,7 @@ const defaultDependencies: PaymentNotificationRegistrationDependencies = {
   // Resolve the injected bridge lazily so pure registration tests can import
   // this module outside a QDN frame.
   request: (options) => qdnRequest(options),
+  requestQortWallet,
   getRules: getNotificationRules,
   addRules: addNotificationRules,
   removeRules: removeNotificationRules,
@@ -33,8 +36,10 @@ function readNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
-async function getSelectedAccountAddress(request: Request): Promise<string> {
-  const account = (await request({ action: 'GET_SELECTED_ACCOUNT' })) as {
+async function getSelectedAccountAddress(
+  requestWallet: () => Promise<unknown>
+): Promise<string> {
+  const account = (await requestWallet()) as {
     address?: unknown;
   } | null;
   const address = readNonEmptyString(account?.address);
@@ -73,7 +78,9 @@ export async function registerPaymentNotifications(
   foreignCoins: string[],
   dependencies: PaymentNotificationRegistrationDependencies = defaultDependencies
 ): Promise<{ ruleCount: number; signature: string }> {
-  const qortAddress = await getSelectedAccountAddress(dependencies.request);
+  const qortAddress = await getSelectedAccountAddress(
+    dependencies.requestQortWallet
+  );
   const foreignWallets = await getForeignWalletXpubs(
     foreignCoins,
     dependencies.request

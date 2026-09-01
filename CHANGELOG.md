@@ -6,7 +6,12 @@ All notable changes to Qortium Wallet will be documented in this file.
 
 ### Fixed
 
-- QORT transaction history now loads. It was empty for two reasons: the history query used `FETCH_NODE_API`, which targets the Qortium node instead of the Qortal chain the QORT payments live on, and the bridge's result envelope was never unwrapped (the transaction array is in `.data`). The query now uses Home's new `SEARCH_QORTAL_TRANSACTIONS` action, which searches the Qortal chain and returns the transaction array directly; on Home builds without that action the list stays empty as before.
+- QORT address, balance, history, name lookup, account unlock, and send operations now prefer the `qortalRequest` bridge. This keeps QORT on the Qortal chain in Qortium Home 2 and allows the same Wallet build to run from Qortal QDN. Qortium assets and foreign wallets remain on `qdnRequest`.
+- QORT addresses now use Qortal's standard `GET_USER_ACCOUNT`, balances use `GET_BALANCE` with that address, and history uses `SEARCH_TRANSACTIONS`, rather than the Home 1.x-only `GET_QORT_BALANCE` and `SEARCH_QORTAL_TRANSACTIONS` QDN aliases. Those aliases remain as a compatibility fallback only when a host does not expose `qortalRequest`.
+- QORT sending selects Home 2's advertised `SEND_QORT` action or Qortal Core's standard `SEND_COIN` contract before approval and makes exactly one send request, avoiding unsafe retry-based protocol detection. The Wallet only invokes Home's explicit account-unlock action when the host advertises it; standard Qortal hosts use their own send approval flow.
+- QORT name recipients now resolve directly against Qortal names instead of requiring a Qortium contact card. Qortium asset and foreign-coin recipient resolution remains on Qortium.
+- QORT payment-notification rules now watch the address returned by the Qortal wallet bridge instead of the Qortium selected-account address.
+- Qortal-only hosts no longer populate unsupported Qortium foreign-chain fallback rows when `qdnRequest` is unavailable.
 
 ## [1.7.9] - 2026-07-10
 

@@ -64,6 +64,11 @@ export function useSupportedChains(): {
     if (sessionStorage.getItem(SESSION_KEY)) return;
 
     async function discover() {
+      if (typeof qdnRequest !== 'function') {
+        setChains([QORT_CHAIN]);
+        setStatus('fallback');
+        return;
+      }
       try {
         const data: SupportedBlockchainInfo[] = await qdnRequest({
           action: 'GET_CROSSCHAIN_BLOCKCHAINS',

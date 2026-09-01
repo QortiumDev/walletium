@@ -34,12 +34,9 @@ export function MyContactCardPage() {
     null
   );
 
-  // qapp-core's useGlobal()/useAuth() resolve the name via GET_PRIMARY_NAME
-  // through qortalRequest, which Qortium Home doesn't provide (Qortium only
-  // exposes qdnRequest, and GET_PRIMARY_NAME isn't one of its actions), so
-  // that name is always empty here. GET_SELECTED_ACCOUNT is the Qortium-native
-  // equivalent and already falls back from primary name to the account's
-  // first owned name, so a user without a primary name can still publish.
+  // Contact cards are Qortium QDN resources, so resolve the publication name
+  // from the Qortium-selected account even though QORT wallet operations use
+  // qortalRequest. The Home response also falls back to the first owned name.
   useEffect(() => {
     let cancelled = false;
     qdnRequest({ action: 'GET_SELECTED_ACCOUNT' })

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { renderHook, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 import { useUnifiedHistory } from '../useUnifiedHistory';
 import type { ChainConfig } from '../../config/chains';
 
@@ -34,11 +34,18 @@ const LTC_CHAIN: ChainConfig = {
 
 beforeEach(() => {
   (globalThis as any).qdnRequest = vi.fn();
+  (globalThis as any).qortalRequest = vi.fn();
+});
+
+afterEach(() => {
+  delete (globalThis as any).qdnRequest;
+  delete (globalThis as any).qortalRequest;
 });
 
 describe('useUnifiedHistory', () => {
   it('returns empty rows and both chains loading initially', () => {
     (globalThis as any).qdnRequest.mockResolvedValue([]);
+    (globalThis as any).qortalRequest.mockResolvedValue([]);
     const { result } = renderHook(() =>
       useUnifiedHistory([QORT_CHAIN, LTC_CHAIN])
     );
@@ -48,10 +55,10 @@ describe('useUnifiedHistory', () => {
   });
 
   it('populates rows after both chains resolve and sorts by timestamp descending', async () => {
-    (globalThis as any).qdnRequest.mockImplementation((opts: any) => {
-      if (opts.action === 'GET_USER_WALLET')
+    (globalThis as any).qortalRequest.mockImplementation((opts: any) => {
+      if (opts.action === 'GET_USER_ACCOUNT')
         return Promise.resolve({ address: 'Qabc' });
-      if (opts.action === 'SEARCH_QORTAL_TRANSACTIONS')
+      if (opts.action === 'SEARCH_TRANSACTIONS')
         return Promise.resolve([
           {
             signature: 'sig1',
@@ -62,6 +69,9 @@ describe('useUnifiedHistory', () => {
             recipient: 'Qabc',
           },
         ]);
+      return Promise.resolve(null);
+    });
+    (globalThis as any).qdnRequest.mockImplementation((opts: any) => {
       if (opts.action === 'GET_USER_WALLET_TRANSACTIONS')
         return Promise.resolve([
           { txHash: 'hash2', totalAmount: 500000000, timestamp: 1000 },
@@ -78,6 +88,14 @@ describe('useUnifiedHistory', () => {
     expect(result.current.rows).toHaveLength(2);
     expect(result.current.rows[0].timestamp).toBe(2000);
     expect(result.current.rows[1].timestamp).toBe(1000);
+    expect(globalThis.qortalRequest).toHaveBeenCalledWith({
+      action: 'SEARCH_TRANSACTIONS',
+      txType: ['PAYMENT'],
+      address: 'Qabc',
+      confirmationStatus: 'CONFIRMED',
+      limit: 20,
+      reverse: true,
+    });
   });
 
   it('places errored chains in errorChains and removes from loadingChains', async () => {
@@ -89,6 +107,7 @@ describe('useUnifiedHistory', () => {
 
   it('excludes ARRR from loadingChains', () => {
     (globalThis as any).qdnRequest.mockResolvedValue([]);
+    (globalThis as any).qortalRequest.mockResolvedValue([]);
     const ARRR_CHAIN: ChainConfig = {
       key: 'ARRR',
       name: 'Pirate Chain',

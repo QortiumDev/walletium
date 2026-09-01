@@ -7,7 +7,30 @@ vi.mock('../contactCardQDN');
 describe('resolveContact', () => {
   afterEach(() => {
     delete (global as any).qdnRequest;
+    delete (global as any).qortalRequest;
     vi.clearAllMocks();
+  });
+
+  it('resolves QORT names directly through qortalRequest without requiring a contact card', async () => {
+    const qdnMock = vi.fn();
+    const qortalMock = vi.fn(async () => ({ owner: 'QortalOwnerAddress' }));
+    (global as any).qdnRequest = qdnMock;
+    (global as any).qortalRequest = qortalMock;
+
+    const result = await resolveContact(' Alice ', 'QORT', 'qortal');
+
+    expect(result).toEqual({
+      status: 'resolved',
+      address: 'QortalOwnerAddress',
+      coin: 'QORT',
+      name: 'Alice',
+    });
+    expect(qortalMock).toHaveBeenCalledWith({
+      action: 'GET_NAME_DATA',
+      name: 'Alice',
+    });
+    expect(contactCardQDN.fetchContactCard).not.toHaveBeenCalled();
+    expect(qdnMock).not.toHaveBeenCalled();
   });
 
   it('returns "name-not-found" when GET_NAME_DATA has no owner', async () => {

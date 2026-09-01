@@ -6,10 +6,12 @@ import {
 } from '../paymentNotificationRegistration';
 
 function dependencies(
-  request: PaymentNotificationRegistrationDependencies['request']
+  request: PaymentNotificationRegistrationDependencies['request'],
+  qortWallet: unknown = { address: 'QSelectedAddress' }
 ): PaymentNotificationRegistrationDependencies {
   return {
     request,
+    requestQortWallet: vi.fn().mockResolvedValue(qortWallet),
     getRules: vi.fn().mockResolvedValue([]),
     addRules: vi.fn().mockResolvedValue(undefined),
     removeRules: vi.fn().mockResolvedValue(undefined),
@@ -17,11 +19,8 @@ function dependencies(
 }
 
 describe('registerPaymentNotifications', () => {
-  it('uses GET_SELECTED_ACCOUNT and registers QORT plus foreign rules', async () => {
+  it('uses the Qortal wallet address and registers QORT plus foreign rules', async () => {
     const request = vi.fn(async (options: QdnRequestOptions) => {
-      if (options.action === 'GET_SELECTED_ACCOUNT') {
-        return { address: 'QSelectedAddress' };
-      }
       if (options.action === 'GET_USER_WALLET') {
         return { publicKey: `xpub-${options.coin}` };
       }
@@ -31,9 +30,7 @@ describe('registerPaymentNotifications', () => {
 
     const result = await registerPaymentNotifications(['BTC', 'LTC'], deps);
 
-    expect(request).toHaveBeenNthCalledWith(1, {
-      action: 'GET_SELECTED_ACCOUNT',
-    });
+    expect(deps.requestQortWallet).toHaveBeenCalledOnce();
     expect(deps.addRules).toHaveBeenCalledWith([
       {
         notificationId: 'own-payment-received-qort',
@@ -56,11 +53,7 @@ describe('registerPaymentNotifications', () => {
   });
 
   it('removes stale Wallet rules before adding the current set', async () => {
-    const request = vi.fn(async (options: QdnRequestOptions) =>
-      options.action === 'GET_SELECTED_ACCOUNT'
-        ? { address: 'QSelectedAddress' }
-        : { publicKey: 'xpub-BTC' }
-    );
+    const request = vi.fn(async () => ({ publicKey: 'xpub-BTC' }));
     const deps = dependencies(request);
     vi.mocked(deps.getRules).mockResolvedValue([
       {
@@ -77,7 +70,7 @@ describe('registerPaymentNotifications', () => {
   });
 
   it('does not claim success without a selected account', async () => {
-    const deps = dependencies(vi.fn().mockResolvedValue({}));
+    const deps = dependencies(vi.fn().mockResolvedValue({}), {});
 
     await expect(registerPaymentNotifications(['BTC'], deps)).rejects.toThrow(
       'No selected QORT account'
@@ -86,11 +79,7 @@ describe('registerPaymentNotifications', () => {
   });
 
   it('does not silently omit a supported foreign wallet', async () => {
-    const request = vi.fn(async (options: QdnRequestOptions) =>
-      options.action === 'GET_SELECTED_ACCOUNT'
-        ? { address: 'QSelectedAddress' }
-        : {}
-    );
+    const request = vi.fn(async () => ({}));
     const deps = dependencies(request);
 
     await expect(registerPaymentNotifications(['BTC'], deps)).rejects.toThrow(

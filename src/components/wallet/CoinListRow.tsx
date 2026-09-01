@@ -18,6 +18,7 @@ import { uiStyleAtom } from '../../state/global/system';
 import { useCoinImageUrl } from '../../hooks/useCoinImageUrl';
 import { useColors } from '../../theme/ColorTokensContext';
 import { tokens } from '../../theme/tokens';
+import { requestWalletForChain } from '../../common/walletBridge';
 
 interface CoinListRowProps {
   chain: ChainConfig;
@@ -27,12 +28,6 @@ interface CoinListRowProps {
   fiatDisplay?: string;
   dragHandleProps?: Record<string, unknown>;
   isDragging?: boolean;
-}
-
-function walletRequestForChain(chain: ChainConfig): QdnRequestOptions {
-  return chain.isNative
-    ? { action: 'GET_USER_WALLET', assetId: 0 }
-    : { action: 'GET_USER_WALLET', coin: chain.coinEnum };
 }
 
 async function copyText(text: string): Promise<void> {
@@ -84,7 +79,7 @@ export function CoinListRow({
     try {
       let walletAddress = address;
       if (!walletAddress) {
-        const response = await qdnRequest(walletRequestForChain(chain));
+        const response = await requestWalletForChain(chain);
         walletAddress = response?.address ?? null;
         if (walletAddress) setAddress(walletAddress);
       }

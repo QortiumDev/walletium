@@ -2,12 +2,14 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { getDefaultStore } from 'jotai';
 import ThemeProviderWrapper from '../../../styles/theme/theme-provider';
 import i18n from '../../../i18n/i18n';
 import { CoinDetail } from '../CoinDetail';
 import type { ChainConfig } from '../../../config/chains';
 import { decimalToAtomic } from '../../../utils/walletSend';
 import * as resolveContactModule from '../../../utils/resolveContact';
+import { walletReadyAtom } from '../../../state/global/system';
 
 vi.mock('../../../utils/resolveContact');
 
@@ -35,6 +37,20 @@ const btcChain: ChainConfig = {
   activeNetwork: 'MAIN',
   supportsHtlc: true,
   supportsLocalChainTrades: true,
+};
+
+const qortChain: ChainConfig = {
+  key: 'QORT',
+  name: 'Qortal',
+  ticker: 'QORT',
+  coinEnum: 'QORT',
+  route: 'qort',
+  defaultFee: 0.001,
+  isNative: true,
+  decimalPlaces: 8,
+  activeNetwork: 'MAIN',
+  supportsHtlc: false,
+  supportsLocalChainTrades: false,
 };
 
 function preparedResult(opts: Record<string, unknown>) {
@@ -68,11 +84,11 @@ function preparedResult(opts: Record<string, unknown>) {
   };
 }
 
-function renderDetail() {
+function renderDetail(chain = btcChain) {
   return render(
     <MemoryRouter>
       <ThemeProviderWrapper>
-        <CoinDetail chain={btcChain} />
+        <CoinDetail chain={chain} />
       </ThemeProviderWrapper>
     </MemoryRouter>
   );
@@ -91,6 +107,94 @@ async function openSendDialog(user: ReturnType<typeof userEvent.setup>) {
     expect(screen.getByLabelText(/optional fee per byte/i)).toHaveValue(0.0002)
   );
 }
+
+describe('CoinDetail QORT qortalRequest flow', () => {
+  let qdnRequestMock: ReturnType<typeof vi.fn>;
+  let qortalRequestMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
+    vi.clearAllMocks();
+    getDefaultStore().set(walletReadyAtom, true);
+    qdnRequestMock = vi.fn(async () => null);
+    qortalRequestMock = vi.fn(async (opts: Record<string, unknown>) => {
+      switch (opts.action) {
+        case 'SHOW_ACTIONS':
+          return ['SEND_QORT'];
+        case 'GET_USER_ACCOUNT':
+          return { address: 'qort-wallet-address' };
+        case 'GET_BALANCE':
+          return '12.5';
+        case 'SEARCH_TRANSACTIONS':
+          return [];
+        case 'UNLOCK_SELECTED_ACCOUNT':
+          return { isUnlocked: true };
+        case 'SEND_QORT':
+          return { accepted: true };
+        default:
+          return null;
+      }
+    });
+    (globalThis as any).qdnRequest = qdnRequestMock;
+    (globalThis as any).qortalRequest = qortalRequestMock;
+  });
+
+  afterEach(() => {
+    getDefaultStore().set(walletReadyAtom, false);
+    delete (globalThis as any).qdnRequest;
+    delete (globalThis as any).qortalRequest;
+  });
+
+  it('loads QORT data and makes exactly one advertised SEND_QORT request', async () => {
+    const user = userEvent.setup();
+    renderDetail(qortChain);
+
+    await waitFor(() =>
+      expect(qortalRequestMock).toHaveBeenCalledWith({
+        action: 'GET_BALANCE',
+        address: 'qort-wallet-address',
+      })
+    );
+    expect(qortalRequestMock).toHaveBeenCalledWith({
+      action: 'SEARCH_TRANSACTIONS',
+      txType: ['PAYMENT'],
+      address: 'qort-wallet-address',
+      confirmationStatus: 'CONFIRMED',
+      limit: 20,
+      reverse: true,
+    });
+
+    await user.click(await screen.findByRole('button', { name: /^send$/i }));
+    await user.type(screen.getByLabelText(/amount \(QORT\)/i), '1.25');
+    await user.type(
+      screen.getByLabelText(/recipient address/i),
+      'qort-recipient-address'
+    );
+    await user.click(screen.getByRole('button', { name: /confirm send/i }));
+
+    await waitFor(() =>
+      expect(
+        qortalRequestMock.mock.calls.filter(
+          ([request]) => request.action === 'SEND_QORT'
+        )
+      ).toHaveLength(1)
+    );
+    expect(qortalRequestMock).toHaveBeenCalledWith({
+      action: 'SEND_QORT',
+      recipient: 'qort-recipient-address',
+      amount: 1.25,
+    });
+    expect(qortalRequestMock).not.toHaveBeenCalledWith({
+      action: 'UNLOCK_SELECTED_ACCOUNT',
+    });
+    expect(
+      qdnRequestMock.mock.calls.some(
+        ([request]) =>
+          request.action === 'SEND_QORT' || request.action === 'SEND_COIN'
+      )
+    ).toBe(false);
+  });
+});
 
 describe('CoinDetail foreign send flow', () => {
   let qdnRequestMock: ReturnType<typeof vi.fn>;

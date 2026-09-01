@@ -3,6 +3,10 @@ import type { ChainConfig } from '../config/chains';
 import type { TxRow } from '../components/wallet/TransactionRow';
 import { requestWithTimeout } from '../common/functions';
 import { TIME_MINUTES_5 } from '../common/constants';
+import {
+  requestQortTransactions,
+  requestQortWallet,
+} from '../common/walletBridge';
 
 export interface UnifiedTxRow extends TxRow {
   chain: ChainConfig;
@@ -16,21 +20,12 @@ export interface UseUnifiedHistoryResult {
 
 async function fetchChainTxs(chain: ChainConfig): Promise<TxRow[]> {
   if (chain.isNative) {
-    const wallet = await qdnRequest({
-      action: 'GET_USER_WALLET',
-      assetId: 0,
-    } as any);
+    const wallet = await requestQortWallet();
     const addr = wallet?.address;
     if (!addr) return [];
 
-    // QORT history lives on the Qortal chain, so it must go through Home's
-    // Qortal search action, not FETCH_NODE_API (which targets the Qortium
-    // node). On Home builds without the action this throws and the caller's
-    // catch leaves the chain's rows empty, as before.
-    const res = await qdnRequest({
-      action: 'SEARCH_QORTAL_TRANSACTIONS',
-      txType: 'PAYMENT',
-      address: addr,
+    const res = await requestQortTransactions(addr, {
+      txType: ['PAYMENT'],
       confirmationStatus: 'CONFIRMED',
       limit: 20,
       reverse: true,

@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Box, Button, FormControlLabel, Switch, TextField } from '@mui/material';
+import {
+  Box,
+  Button,
+  FormControlLabel,
+  Switch,
+  TextField,
+} from '@mui/material';
 import { useAtomValue } from 'jotai';
 import { useTranslation } from 'react-i18next';
 import type { ChainConfig } from '../../config/chains';
@@ -9,18 +15,13 @@ import { uiStyleAtom } from '../../state/global/system';
 import { useColors } from '../../theme/ColorTokensContext';
 import { tokens } from '../../theme/tokens';
 import { useCoinImageUrl } from '../../hooks/useCoinImageUrl';
+import { requestWalletForChain } from '../../common/walletBridge';
 
 interface Props {
   chain: ChainConfig;
   state: ContactCardCoinState;
   onDecisionChange: (coin: string, decision: 'published' | 'private') => void;
   onOverrideChange: (coin: string, address: string | undefined) => void;
-}
-
-function walletRequestForChain(chain: ChainConfig): QdnRequestOptions {
-  return chain.isNative
-    ? { action: 'GET_USER_WALLET', assetId: 0 }
-    : { action: 'GET_USER_WALLET', coin: chain.coinEnum };
 }
 
 export function ContactCardCoinRow({
@@ -46,7 +47,7 @@ export function ContactCardCoinRow({
 
   useEffect(() => {
     let cancelled = false;
-    qdnRequest(walletRequestForChain(chain))
+    requestWalletForChain(chain)
       .then((res) => {
         if (!cancelled) setWalletAddress(res?.address ?? null);
       })
@@ -74,7 +75,13 @@ export function ContactCardCoinRow({
         py: 1,
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.75, sm: 1.5 } }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: { xs: 0.75, sm: 1.5 },
+        }}
+      >
         {coinImageUrl ? (
           <Box
             component="img"
