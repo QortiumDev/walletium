@@ -27,13 +27,17 @@ const unavailable: ForeignWalletAvailability = Object.freeze({
   canSend: false,
 });
 
-const READ_MODES = new Set<HomeWalletMode>(['HOME_LOCAL', 'PUBLIC_NODE']);
+const READ_MODES = new Set<HomeWalletMode>([
+  'HOME_LOCAL',
+  'PUBLIC_NODE',
+  'TRUSTED_CORE',
+]);
 const RECEIVE_MODES = new Set<HomeWalletMode>(['HOME_LOCAL']);
 const SEND_MODES = new Set<HomeWalletMode>([
   'HOME_LOCAL',
   'HOME_SIGNED_PUBLIC_NODE',
 ]);
-const SERVER_MODES = new Set<HomeWalletMode>(['HOME_LOCAL']);
+const SERVER_MODES = new Set<HomeWalletMode>(['HOME_LOCAL', 'TRUSTED_CORE']);
 
 function modeMatches(
   enabled: unknown,

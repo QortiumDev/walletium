@@ -90,6 +90,34 @@ describe('foreign wallet capability contract', () => {
     });
   });
 
+  it('accepts Home 2 trusted-Core reads and server management', () => {
+    const home2Chain: ChainConfig = {
+      ...chain,
+      homeWallet: {
+        ...chain.homeWallet!,
+        readMode: 'TRUSTED_CORE',
+        send: false,
+        sendMode: 'NONE',
+        serverManagementMode: 'TRUSTED_CORE',
+      },
+    };
+    expect(
+      foreignWalletAvailability(home2Chain, [
+        'GET_USER_WALLET',
+        'GET_WALLET_BALANCE',
+        'GET_USER_WALLET_TRANSACTIONS',
+        'GET_CROSSCHAIN_SERVER_INFO',
+        'SET_CURRENT_FOREIGN_SERVER',
+      ])
+    ).toEqual({
+      canManageServer: true,
+      canReadBalance: true,
+      canReadTransactions: true,
+      canReceive: true,
+      canSend: false,
+    });
+  });
+
   it('honors explicit per-chain send refusal', () => {
     const availability = foreignWalletAvailability(
       {
