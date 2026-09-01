@@ -107,6 +107,21 @@ export function requestQortUnlock(): Promise<any> {
   return qortBridge().request({ action: 'UNLOCK_SELECTED_ACCOUNT' });
 }
 
+// Qortium Home always supports UNLOCK_SELECTED_ACCOUNT even when a particular
+// build's SHOW_ACTIONS response omits it; a bridge that isn't Home (native
+// Qortal, or a Qortal asset network) only supports the unlock action when it
+// explicitly advertises it.
+export function shouldAttemptAccountUnlock(
+  usesQdnRequest: boolean,
+  actions: readonly string[]
+): boolean {
+  return usesQdnRequest || actions.includes('UNLOCK_SELECTED_ACCOUNT');
+}
+
+export function isUnlockedResult(result: unknown): boolean {
+  return (result as { isUnlocked?: boolean } | null)?.isUnlocked === true;
+}
+
 export function requestQortSend(
   action: QortSendAction,
   recipient: string,

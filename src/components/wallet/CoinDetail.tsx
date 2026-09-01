@@ -65,6 +65,7 @@ import {
 } from '../../common/constants';
 import { TransactionRow, type TxRow } from './TransactionRow';
 import {
+  isUnlockedResult,
   qortSendActionForActions,
   requestQortActions,
   requestQortBalance,
@@ -72,6 +73,7 @@ import {
   requestQortTransactions,
   requestQortUnlock,
   requestWalletForChain,
+  shouldAttemptAccountUnlock,
   type QortSendAction,
 } from '../../common/walletBridge';
 
@@ -94,12 +96,10 @@ async function ensureAccountUnlocked(
   qortCanUnlock: boolean
 ): Promise<boolean> {
   if (chain.isNative && !qortCanUnlock) return true;
-  const result = (await (chain.isNative
+  const result = await (chain.isNative
     ? requestQortUnlock()
-    : qdnRequest({ action: 'UNLOCK_SELECTED_ACCOUNT' }))) as {
-    isUnlocked?: boolean;
-  } | null;
-  return result?.isUnlocked === true;
+    : qdnRequest({ action: 'UNLOCK_SELECTED_ACCOUNT' }));
+  return isUnlockedResult(result);
 }
 
 export function CoinDetail({ chain }: Props) {
@@ -323,8 +323,7 @@ export function CoinDetail({ chain }: Props) {
           const action = qortSendActionForActions(actions);
           setQortSendAction(action);
           setQortCanUnlock(
-            protocol === 'qdnRequest' ||
-              actions.includes('UNLOCK_SELECTED_ACCOUNT')
+            shouldAttemptAccountUnlock(protocol === 'qdnRequest', actions)
           );
           setCanSend(action !== null);
           setWalletAvailable(true);
