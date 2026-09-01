@@ -44,10 +44,19 @@ describe('AssetDetail asset reads', () => {
         case 'GET_USER_WALLET':
           return { address: 'Qholder' };
         case 'GET_ASSET_BALANCES':
-          expect(opts).toMatchObject({ address: 'Qholder', assetId: 42, limit: 0 });
+          expect(opts).toMatchObject({
+            address: 'Qholder',
+            assetId: 42,
+            limit: 0,
+          });
           return [{ address: 'Qholder', assetId: 42, balance: '500000000' }];
         case 'GET_ASSET_TRANSFERS':
-          expect(opts).toMatchObject({ assetId: 42, address: 'Qholder', limit: 20, reverse: true });
+          expect(opts).toMatchObject({
+            assetId: 42,
+            address: 'Qholder',
+            limit: 20,
+            reverse: true,
+          });
           return [];
         case 'SHOW_ACTIONS':
           return ['TRANSFER_ASSET'];
@@ -66,9 +75,17 @@ describe('AssetDetail asset reads', () => {
 
     await waitFor(() => expect(screen.getByText('GOLD')).toBeInTheDocument());
     await waitFor(() =>
-      expect(qdnRequestMock.mock.calls.some(([opts]) => opts.action === 'GET_ASSET_BALANCES')).toBe(true)
+      expect(
+        qdnRequestMock.mock.calls.some(
+          ([opts]) => opts.action === 'GET_ASSET_BALANCES'
+        )
+      ).toBe(true)
     );
 
-    expect(qdnRequestMock.mock.calls.some(([opts]) => opts.action === 'FETCH_NODE_API')).toBe(false);
+    expect(
+      qdnRequestMock.mock.calls.some(
+        ([opts]) => opts.action === 'FETCH_NODE_API'
+      )
+    ).toBe(false);
   });
 });
