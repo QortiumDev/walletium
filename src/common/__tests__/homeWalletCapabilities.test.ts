@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { ChainConfig } from '../../config/chains';
 import {
   foreignWalletAvailability,
+  HOME_1_WALLET_READ_CONTRACT,
   HOME_WALLET_CONTRACT,
+  legacyHome1WalletCapability,
 } from '../homeWalletCapabilities';
 
 const chain: ChainConfig = {
@@ -22,11 +24,14 @@ const chain: ChainConfig = {
     implemented: true,
     protocol: 'qdnRequest',
     read: true,
+    readMode: 'PUBLIC_NODE',
     receive: true,
+    receiveMode: 'HOME_LOCAL',
     requiresUnlockedAccount: true,
     send: true,
     serverManagement: true,
-    sendMode: 'TRUSTED_CORE',
+    sendMode: 'HOME_SIGNED_PUBLIC_NODE',
+    serverManagementMode: 'HOME_LOCAL',
   },
 };
 
@@ -89,7 +94,11 @@ describe('foreign wallet capability contract', () => {
     const availability = foreignWalletAvailability(
       {
         ...chain,
-        homeWallet: { ...chain.homeWallet!, send: false },
+        homeWallet: {
+          ...chain.homeWallet!,
+          send: false,
+          sendMode: 'NONE',
+        },
       },
       ['SEND_COIN', 'GET_WALLET_BALANCE']
     );
@@ -128,5 +137,103 @@ describe('foreign wallet capability contract', () => {
         'SET_CURRENT_FOREIGN_SERVER',
       ]).canManageServer
     ).toBe(true);
+  });
+
+  it('rejects contradictory, missing, and Core-signed modes', () => {
+    for (const homeWallet of [
+      { ...chain.homeWallet!, readMode: 'NONE' as const },
+      { ...chain.homeWallet!, receiveMode: undefined as any },
+      { ...chain.homeWallet!, sendMode: 'TRUSTED_CORE' as const },
+      {
+        ...chain.homeWallet!,
+        serverManagement: false,
+        serverManagementMode: 'HOME_LOCAL' as const,
+      },
+    ]) {
+      expect(
+        foreignWalletAvailability({ ...chain, homeWallet }, [
+          'GET_USER_WALLET',
+          'GET_WALLET_BALANCE',
+          'GET_USER_WALLET_TRANSACTIONS',
+          'SEND_COIN',
+          'UNLOCK_SELECTED_ACCOUNT',
+          'GET_CROSSCHAIN_SERVER_INFO',
+          'SET_CURRENT_FOREIGN_SERVER',
+        ])
+      ).toEqual({
+        canManageServer: false,
+        canReadBalance: false,
+        canReadTransactions: false,
+        canReceive: false,
+        canSend: false,
+      });
+    }
+  });
+
+  it('grants exact Home 1.x read compatibility but never legacy send', () => {
+    const legacy = legacyHome1WalletCapability({
+      hostName: 'qortium-home',
+      hostVersion: '1.8.0',
+      platform: 'desktop',
+    });
+    expect(legacy?.contract).toBe(HOME_1_WALLET_READ_CONTRACT);
+    expect(
+      foreignWalletAvailability({ ...chain, homeWallet: legacy }, [
+        'GET_USER_WALLET',
+        'GET_WALLET_BALANCE',
+        'GET_USER_WALLET_TRANSACTIONS',
+        'SEND_COIN',
+        'UNLOCK_SELECTED_ACCOUNT',
+        'GET_CROSSCHAIN_SERVER_INFO',
+        'SET_CURRENT_FOREIGN_SERVER',
+      ])
+    ).toEqual({
+      canManageServer: true,
+      canReadBalance: true,
+      canReadTransactions: true,
+      canReceive: true,
+      canSend: false,
+    });
+    expect(
+      legacyHome1WalletCapability({
+        hostName: 'qortium-home',
+        hostVersion: '2.1.0',
+      })
+    ).toBeUndefined();
+    expect(
+      legacyHome1WalletCapability({
+        hostName: 'another-host',
+        hostVersion: '1.8.0',
+      })
+    ).toBeUndefined();
+  });
+
+  it('rejects an unverified copy of the Wallet-local Home 1.x marker', () => {
+    expect(
+      foreignWalletAvailability(
+        {
+          ...chain,
+          homeWallet: {
+            ...legacyHome1WalletCapability({
+              hostName: 'qortium-home',
+              hostVersion: '1.8.0',
+            })!,
+          },
+        },
+        [
+          'GET_USER_WALLET',
+          'GET_WALLET_BALANCE',
+          'GET_USER_WALLET_TRANSACTIONS',
+          'GET_CROSSCHAIN_SERVER_INFO',
+          'SET_CURRENT_FOREIGN_SERVER',
+        ]
+      )
+    ).toEqual({
+      canManageServer: false,
+      canReadBalance: false,
+      canReadTransactions: false,
+      canReceive: false,
+      canSend: false,
+    });
   });
 });

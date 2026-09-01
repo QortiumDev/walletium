@@ -34,7 +34,11 @@ export function usePaymentNotifications() {
   const setRegistrationStatus = useSetAtom(
     paymentNotificationRegistrationStatusAtom
   );
-  const { chains } = useSupportedChains();
+  const {
+    chains,
+    status: chainDiscoveryStatus,
+    walletAuthorityReady,
+  } = useSupportedChains();
   const disabledCleanupAttempted = useRef(false);
   const [accountRevision, setAccountRevision] = useState(0);
   const [foreignActions, setForeignActions] = useState<string[] | null>(null);
@@ -48,7 +52,7 @@ export function usePaymentNotifications() {
 
   useEffect(() => {
     if (typeof qdnRequest !== 'function') {
-      setForeignActions([]);
+      setForeignActions(null);
       return;
     }
 
@@ -58,11 +62,13 @@ export function usePaymentNotifications() {
       const requestRevision = ++revision;
       qdnRequest({ action: 'SHOW_ACTIONS' })
         .then((actions: unknown) => {
-          if (!cancelled && requestRevision === revision)
-            setForeignActions(Array.isArray(actions) ? actions : []);
+          if (!cancelled && requestRevision === revision) {
+            setForeignActions(Array.isArray(actions) ? actions : null);
+          }
         })
         .catch(() => {
-          if (!cancelled && requestRevision === revision) setForeignActions([]);
+          if (!cancelled && requestRevision === revision)
+            setForeignActions(null);
         });
     };
     const handleBridgeChange = () => {
@@ -132,7 +138,13 @@ export function usePaymentNotifications() {
       };
     }
 
-    if (!walletReady || foreignActions === null) return;
+    if (
+      !walletReady ||
+      foreignActions === null ||
+      chainDiscoveryStatus !== 'live' ||
+      !walletAuthorityReady
+    )
+      return;
 
     disabledCleanupAttempted.current = false;
     const foreignCoins = chains
@@ -165,6 +177,7 @@ export function usePaymentNotifications() {
   }, [
     accountRevision,
     chains,
+    chainDiscoveryStatus,
     enabled,
     foreignActions,
     registrationError,
@@ -173,5 +186,6 @@ export function usePaymentNotifications() {
     setRegistrationStatus,
     supported,
     walletReady,
+    walletAuthorityReady,
   ]);
 }

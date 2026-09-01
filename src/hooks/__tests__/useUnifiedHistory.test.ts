@@ -36,10 +36,14 @@ const LTC_CHAIN: ChainConfig = {
     implemented: true,
     protocol: 'qdnRequest',
     read: true,
+    readMode: 'PUBLIC_NODE',
     receive: true,
+    receiveMode: 'HOME_LOCAL',
     requiresUnlockedAccount: true,
     send: true,
-    sendMode: 'TRUSTED_CORE',
+    sendMode: 'HOME_SIGNED_PUBLIC_NODE',
+    serverManagement: false,
+    serverManagementMode: 'NONE',
   },
 };
 

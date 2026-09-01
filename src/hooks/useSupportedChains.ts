@@ -6,6 +6,10 @@ import {
   type ChainConfig,
   type HomeWalletCapability,
 } from '../config/chains';
+import {
+  HOME_WALLET_CONTRACT,
+  legacyHome1WalletCapability,
+} from '../common/homeWalletCapabilities';
 
 const SESSION_KEY = 'qortium_supported_chains_v2';
 const SESSION_STATUS_KEY = 'qortium_chain_status_v2';
@@ -25,6 +29,7 @@ interface SupportedBlockchainInfo {
 export function useSupportedChains(): {
   chains: ChainConfig[];
   status: ChainDiscoveryStatus;
+  walletAuthorityReady: boolean;
 } {
   const [chains, setChains] = useState<ChainConfig[]>(() => {
     // Seed from session cache so there's no flash on reload; otherwise start
@@ -60,6 +65,7 @@ export function useSupportedChains(): {
     return [QORT_CHAIN];
   });
   const [status, setStatus] = useState<ChainDiscoveryStatus>('pending');
+  const [walletAuthorityReady, setWalletAuthorityReady] = useState(false);
   const discoveryRevision = useRef(0);
 
   useEffect(() => {
@@ -70,6 +76,7 @@ export function useSupportedChains(): {
         if (cancelled || revision !== discoveryRevision.current) return;
         setChains([QORT_CHAIN]);
         setStatus('fallback');
+        setWalletAuthorityReady(false);
         return;
       }
       try {
@@ -78,6 +85,23 @@ export function useSupportedChains(): {
         });
 
         if (!Array.isArray(data)) throw new Error('Unexpected response shape');
+
+        const requiresLegacyIdentity = data.some(
+          (info) => info?.homeWallet?.contract !== HOME_WALLET_CONTRACT
+        );
+        let legacyHome1Capability: HomeWalletCapability | undefined;
+        let authorityReady = true;
+        if (requiresLegacyIdentity) {
+          try {
+            legacyHome1Capability = legacyHome1WalletCapability(
+              await qdnRequest({ action: 'GET_HOST_INFO' })
+            );
+          } catch {
+            // A failed identity lookup is uncertain, not proof that legacy
+            // wallet authority is absent. Preserve durable notification rules.
+            authorityReady = false;
+          }
+        }
 
         const merged: ChainConfig[] = data
           .filter(
@@ -100,7 +124,13 @@ export function useSupportedChains(): {
                 (info.activeNetwork as ChainConfig['activeNetwork']) ?? 'MAIN',
               supportsHtlc: info.supportsHtlc,
               supportsLocalChainTrades: info.supportsLocalChainTrades,
-              homeWallet: info.homeWallet,
+              // A discovery row cannot self-assert Wallet's local Home 1.x
+              // compatibility marker. Only the current wire contract passes
+              // through; legacy capability comes from verified host identity.
+              homeWallet:
+                info.homeWallet?.contract === HOME_WALLET_CONTRACT
+                  ? info.homeWallet
+                  : legacyHome1Capability,
             };
           })
           .filter((c): c is ChainConfig => c !== undefined);
@@ -109,6 +139,7 @@ export function useSupportedChains(): {
         sessionStorage.setItem(SESSION_STATUS_KEY, 'live');
         setChains([QORT_CHAIN, ...merged]);
         setStatus('live');
+        setWalletAuthorityReady(authorityReady);
       } catch (err) {
         if (cancelled || revision !== discoveryRevision.current) return;
         console.warn(
@@ -117,6 +148,7 @@ export function useSupportedChains(): {
         );
         setChains([QORT_CHAIN, ...DEFAULT_CHAINS]);
         setStatus('fallback');
+        setWalletAuthorityReady(false);
       }
     }
 
@@ -130,6 +162,7 @@ export function useSupportedChains(): {
         )
       );
       setStatus('pending');
+      setWalletAuthorityReady(false);
       discover();
     };
     window.addEventListener('qortiumBridgeStateChanged', refresh);
@@ -139,5 +172,5 @@ export function useSupportedChains(): {
     };
   }, []);
 
-  return { chains, status };
+  return { chains, status, walletAuthorityReady };
 }

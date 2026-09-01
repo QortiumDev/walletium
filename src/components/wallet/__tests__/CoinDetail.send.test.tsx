@@ -43,11 +43,14 @@ const btcChain: ChainConfig = {
     implemented: true,
     protocol: 'qdnRequest',
     read: true,
+    readMode: 'PUBLIC_NODE',
     receive: true,
+    receiveMode: 'HOME_LOCAL',
     requiresUnlockedAccount: true,
     send: true,
     serverManagement: true,
-    sendMode: 'TRUSTED_CORE',
+    sendMode: 'HOME_SIGNED_PUBLIC_NODE',
+    serverManagementMode: 'HOME_LOCAL',
   },
 };
 

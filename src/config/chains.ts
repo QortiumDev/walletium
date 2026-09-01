@@ -13,11 +13,11 @@ export interface HomeWalletCapability {
   receive: boolean;
   requiresUnlockedAccount: boolean;
   send: boolean;
-  serverManagement?: boolean;
-  readMode?: HomeWalletMode;
-  receiveMode?: HomeWalletMode;
+  serverManagement: boolean;
+  readMode: HomeWalletMode;
+  receiveMode: HomeWalletMode;
   sendMode: HomeWalletMode;
-  serverManagementMode?: HomeWalletMode;
+  serverManagementMode: HomeWalletMode;
 }
 
 export interface ChainConfig {
