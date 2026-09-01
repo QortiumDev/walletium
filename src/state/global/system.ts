@@ -48,6 +48,16 @@ export type SortMode =
 export const sortModeAtom = atomWithStorage<SortMode>('qw-sort-mode', 'custom');
 export const customOrderAtom = atomWithStorage<string[]>('qw-custom-order', []);
 
+// Pre-network-qualification asset keys were `asset:${assetId}` (Qortium was
+// the only asset network at the time). Remap them to `asset:qortium:${assetId}`
+// so a user's existing custom order survives the upgrade to network-qualified keys.
+export function migrateLegacyCustomOrder(order: string[]): string[] {
+  return order.map((key) => {
+    const legacyAssetKey = /^asset:(\d+)$/.exec(key);
+    return legacyAssetKey ? `asset:qortium:${legacyAssetKey[1]}` : key;
+  });
+}
+
 export type ViewMode = 'grid' | 'list';
 
 // Keep the portfolio presentation choice local to this browser. Other routes

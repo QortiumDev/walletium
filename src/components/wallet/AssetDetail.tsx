@@ -57,6 +57,10 @@ import {
   requestAssetUnlock,
   requestAssetWallet,
 } from '../../common/assetBridge';
+import {
+  isUnlockedResult,
+  shouldAttemptAccountUnlock,
+} from '../../common/walletBridge';
 
 interface Props {
   assetId: number;
@@ -66,10 +70,8 @@ interface Props {
 const RECIPIENT_NAME_LOOKUP_DEBOUNCE_MS = 800;
 
 async function ensureAccountUnlocked(network: AssetNetwork): Promise<boolean> {
-  const result = (await requestAssetUnlock(network)) as {
-    isUnlocked?: boolean;
-  } | null;
-  return result?.isUnlocked === true;
+  const result = await requestAssetUnlock(network);
+  return isUnlockedResult(result);
 }
 
 export function AssetDetail({ assetId, network = 'qortium' }: Props) {
@@ -219,7 +221,12 @@ export function AssetDetail({ assetId, network = 'qortium' }: Props) {
       .then((actions: unknown) => {
         if (Array.isArray(actions)) {
           setCanSend(actions.includes('TRANSFER_ASSET'));
-          setCanUnlock(actions.includes('UNLOCK_SELECTED_ACCOUNT'));
+          // The 'qortium' asset network always resolves through qdnRequest
+          // (Home), which supports UNLOCK_SELECTED_ACCOUNT even when a
+          // particular build's SHOW_ACTIONS response omits it.
+          setCanUnlock(
+            shouldAttemptAccountUnlock(network === 'qortium', actions)
+          );
         }
       })
       .catch(() => {

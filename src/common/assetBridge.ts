@@ -27,10 +27,10 @@ function requestForNetwork(network: AssetNetwork, options: QdnRequestOptions) {
   return qortalRequest(options);
 }
 
-function qortalReadPath(options: AssetReadOptions): string {
+function buildQueryParams(options: object, omit: Set<string>): string {
   const params = new URLSearchParams();
   Object.entries(options).forEach(([key, value]) => {
-    if (key === 'action' || value === undefined || value === null) return;
+    if (omit.has(key) || value === undefined || value === null) return;
     if (
       typeof value === 'string' ||
       typeof value === 'number' ||
@@ -39,14 +39,34 @@ function qortalReadPath(options: AssetReadOptions): string {
       params.set(key, String(value));
     }
   });
-  const base =
-    options.action === 'GET_ASSET_INFO'
-      ? '/assets/info'
-      : options.action === 'GET_ASSET_BALANCES'
-        ? '/assets/balances'
-        : '/assets/transfers';
-  const query = params.toString();
-  return query ? `${base}?${query}` : base;
+  return params.toString();
+}
+
+// Core's REST API is inconsistent about assetId: /assets/info takes it as a
+// camelCase query param, /assets/balances takes it as a lowercase "assetid"
+// query param, and /assets/transfers takes it as a required path segment.
+function qortalReadPath(options: AssetReadOptions): string {
+  const assetId = (options as { assetId?: unknown }).assetId;
+  const hasAssetId = typeof assetId === 'number';
+
+  if (options.action === 'GET_ASSET_TRANSFERS') {
+    if (!hasAssetId) {
+      throw new Error('GET_ASSET_TRANSFERS requires a numeric assetId.');
+    }
+    const query = buildQueryParams(options, new Set(['action', 'assetId']));
+    return `/assets/transfers/${assetId}${query ? `?${query}` : ''}`;
+  }
+
+  if (options.action === 'GET_ASSET_BALANCES') {
+    const query = buildQueryParams(options, new Set(['action', 'assetId']));
+    const params = new URLSearchParams(query);
+    if (hasAssetId) params.set('assetid', String(assetId));
+    const finalQuery = params.toString();
+    return `/assets/balances${finalQuery ? `?${finalQuery}` : ''}`;
+  }
+
+  const query = buildQueryParams(options, new Set(['action']));
+  return `/assets/info${query ? `?${query}` : ''}`;
 }
 
 async function directQortalRead(options: AssetReadOptions): Promise<any> {

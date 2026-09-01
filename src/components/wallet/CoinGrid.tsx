@@ -41,6 +41,7 @@ import type { AssetNetwork } from '../../utils/Types';
 import {
   sortModeAtom,
   customOrderAtom,
+  migrateLegacyCustomOrder,
   tileSizeAtom,
   uiStyleAtom,
   currencyAtom,
@@ -627,8 +628,9 @@ export function CoinGrid() {
   useEffect(() => {
     const itemKeys = items.map((item) => item.key);
     setCustomOrder((prev: string[]) => {
-      const filtered = prev.filter((k: string) => itemKeys.includes(k));
-      const added = itemKeys.filter((k: string) => !prev.includes(k));
+      const migrated = migrateLegacyCustomOrder(prev);
+      const filtered = migrated.filter((k: string) => itemKeys.includes(k));
+      const added = itemKeys.filter((k: string) => !migrated.includes(k));
       const merged = [...filtered, ...added];
       if (merged.join(',') === prev.join(',')) return prev;
       return merged;
