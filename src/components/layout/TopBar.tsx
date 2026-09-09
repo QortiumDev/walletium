@@ -381,55 +381,23 @@ export function TopBar() {
 
         {/* Portfolio view selector */}
         {isPortfolioRoute && (
-          <Box
-            role="group"
-            aria-label="portfolio view"
-            sx={{
-              display: 'flex',
-              flexShrink: 0,
-              border: `${tokens.shape.borderWidth} solid ${c.borderLight}`,
-              borderRadius: `${isClassic ? tokens.shape.radiusMd : tokens.shape.radius}px`,
-              overflow: 'hidden',
-            }}
+          <Tooltip
+            title={viewMode === 'grid' ? 'Change to list view?' : 'Change to grid view?'}
+            placement="bottom"
           >
-            <Tooltip title="Grid view" placement="bottom">
-              <IconButton
-                size="small"
-                onClick={() => setViewMode('grid')}
-                aria-label="grid view"
-                aria-pressed={viewMode === 'grid'}
-                sx={{
-                  ...buttonSx,
-                  minWidth: 40,
-                  width: 40,
-                  borderRadius: 0,
-                  color: viewMode === 'grid' ? c.accent : c.textSecondary,
-                  bgcolor: viewMode === 'grid' ? c.accentSoft : 'transparent',
-                }}
-              >
+            <IconButton
+              size="small"
+              onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+              aria-label="toggle portfolio view"
+              sx={buttonSx}
+            >
+              {viewMode === 'grid' ? (
                 <GridViewIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="List view" placement="bottom">
-              <IconButton
-                size="small"
-                onClick={() => setViewMode('list')}
-                aria-label="list view"
-                aria-pressed={viewMode === 'list'}
-                sx={{
-                  ...buttonSx,
-                  minWidth: 40,
-                  width: 40,
-                  borderRadius: 0,
-                  borderInlineStart: `${tokens.shape.borderWidth} solid ${c.borderLight}`,
-                  color: viewMode === 'list' ? c.accent : c.textSecondary,
-                  bgcolor: viewMode === 'list' ? c.accentSoft : 'transparent',
-                }}
-              >
+              ) : (
                 <ViewListIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Box>
+              )}
+            </IconButton>
+          </Tooltip>
         )}
 
         {/* Zoom (portfolio grid view only) */}
